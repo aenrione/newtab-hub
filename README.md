@@ -1,5 +1,7 @@
 # New Tab Hub
 
+<img width="1413" height="804" alt="image" src="https://github.com/user-attachments/assets/d851ce8d-378d-4e87-84f5-96cccee055d0" />
+
 A keyboard-first new tab dashboard for Chromium browsers (Brave, Chrome, Edge, etc.). Replaces the default new tab page with a configurable grid of widgets: pinned links, link groups, RSS feeds, market tickers, and more.
 
 Built entirely with vanilla JavaScript — no frameworks, no build step, no dependencies.
