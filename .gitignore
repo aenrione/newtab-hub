@@ -1,0 +1,23 @@
+# Private config (user-specific links and URLs)
+config.private.js
+profiles/private/*.js
+!profiles/private/.keep
+
+# Internal docs
+docs/specs
+**/*superpowers/
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Dependencies (future-proofing)
+node_modules/
+
+# Legacy
+app.js

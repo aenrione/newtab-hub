@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New Tab Hub</title>
+    <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body tabindex="-1">
+    <main class="shell">
+      <!-- Topbar: time + gear -->
+      <header class="topbar">
+        <span class="topbar-left"></span>
+        <div class="topbar-controls">
+          <button id="help-button" class="topbar-icon" type="button" title="Keyboard shortcuts (?)">?</button>
+          <span id="topbar-time" class="topbar-time">--:--</span>
+          <div id="profile-switcher" class="profile-switcher">
+            <button id="profile-switcher-btn" class="topbar-icon profile-switcher-btn" type="button" title="Switch profile"></button>
+            <div id="profile-dropdown" class="profile-dropdown"></div>
+          </div>
+          <button id="layout-edit-toggle" class="topbar-icon" type="button" title="Edit layout">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          </button>
+          <button id="theme-button" class="topbar-icon" type="button" title="Theme">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 2a6 6 0 000 12V2z" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dashboard grid — widgets are injected by JS -->
+      <div id="dashboard-grid" class="dashboard-grid"></div>
+    </main>
+
+    <!-- Scripts -->
+    <script src="config.shared.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/cache.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/keyboard.js"></script>
+    <script src="js/help.js"></script>
+    <script src="js/icons.js"></script>
+    <script src="js/grid.js"></script>
+    <script src="js/registry.js"></script>
+    <script src="js/widgets/search.js"></script>
+    <script src="js/widgets/pinned.js"></script>
+    <script src="js/widgets/links.js"></script>
+    <script src="js/widgets/markets.js"></script>
+    <script src="js/widgets/feeds.js"></script>
+    <script src="js/widgets/clock.js"></script>
+    <script src="js/customize.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>
