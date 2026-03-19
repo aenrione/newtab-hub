@@ -21,7 +21,6 @@ Hub.registry.register("link-group", {
       var badge = item.badge ? '<span class="link-badge">' + Hub.escapeHtml(item.badge) + '</span>' : '';
       return '<a class="link-item" href="' + Hub.escapeHtml(item.href) + '" target="_self" rel="noreferrer" ' +
         'data-focusable="true" data-title="' + Hub.escapeHtml(item.title) + '" ' +
-        'data-search-text="' + Hub.escapeHtml(item.title + " " + title + " " + Hub.formatHost(item.href)) + '" ' +
         'title="' + Hub.escapeHtml(Hub.formatHost(item.href)) + '">' +
         Hub.iconMarkup(item.href, item.title, true) +
         '<span class="link-item-title">' + Hub.escapeHtml(item.title) + '</span>' +

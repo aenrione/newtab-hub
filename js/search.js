@@ -32,14 +32,6 @@ Hub.search = (function () {
     return { title: "Search the web for " + t, href: state.searchBaseUrl + encodeURIComponent(t), type: "Search" };
   }
 
-  function filterCards(query) {
-    var nq = Hub.normalize(query);
-    document.querySelectorAll("[data-search-text]").forEach(function (node) {
-      var matches = !nq || Hub.normalize(node.dataset.searchText).includes(nq);
-      node.style.display = matches ? "" : "none";
-    });
-  }
-
   function update(query, els) {
     var nq = Hub.normalize(query);
     if (!nq) {
@@ -47,7 +39,6 @@ Hub.search = (function () {
       state.activeIndex = 0;
       els.resultsContainer.classList.add("hidden");
       els.resultsContainer.replaceChildren();
-      filterCards("");
       return;
     }
 
@@ -59,7 +50,6 @@ Hub.search = (function () {
     var qa = buildQueryAction(query);
     state.results = qa ? [qa].concat(matches) : matches;
     state.activeIndex = 0;
-    filterCards(nq);
 
     var frag = document.createDocumentFragment();
     state.results.forEach(function (item, i) {
@@ -92,8 +82,7 @@ Hub.search = (function () {
     update: update,
     cycle: cycle,
     currentResult: currentResult,
-    buildQueryAction: buildQueryAction,
-    filterCards: filterCards
+    buildQueryAction: buildQueryAction
   };
 })();
 

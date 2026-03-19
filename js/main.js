@@ -274,11 +274,17 @@
     if (token !== state.renderToken) return;
     scheduleHealthRefresh();
 
-    /* Search index */
+    /* Search index (deduplicated by href) */
     Hub.search.state.indexFn = function () {
-      return state.links
+      var all = state.links
         .concat(state.markets.map(function (m) { return { title: m.label, href: m.href, type: "Market" }; }))
         .concat(state.feedEntries);
+      var seen = {};
+      return all.filter(function (item) {
+        if (!item.href || seen[item.href]) return false;
+        seen[item.href] = true;
+        return true;
+      });
     };
 
     /* Apply theme */
@@ -540,6 +546,10 @@
     });
 
     document.getElementById("help-button").addEventListener("click", function () { Hub.help.show(); });
+
+    document.getElementById("zen-toggle").innerHTML = Hub.icons.eye;
+    document.getElementById("zen-toggle").addEventListener("click", function () { Hub.zen.toggle(); });
+    Hub.zen.init(function () { return state; });
 
     await renderDashboard(activeProfile);
   }

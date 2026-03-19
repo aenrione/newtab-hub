@@ -52,6 +52,16 @@ body, input, select, button, textarea { font-family: var(--font-body); }
 /* ── Shell ── */
 .shell { max-width: 1560px; margin: 0 auto; padding: 14px 20px 24px; }
 
+/* ── Zen mode ── */
+.shell > .topbar,
+.shell > .dashboard-grid { transition: opacity 300ms ease; }
+.shell.zen-mode > .topbar,
+.shell.zen-mode > .dashboard-grid {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+
 /* ── Topbar ── */
 .topbar {
   display: flex;
@@ -131,7 +141,8 @@ body, input, select, button, textarea { font-family: var(--font-body); }
 }
 
 /* ── Search widget ── */
-.widget-search { border: none; padding: 0; }
+.widget-search { border: none; padding: 0; overflow: visible; }
+.widget-search::before { display: none; }
 .search-wrap {
   display: flex;
   align-items: center;

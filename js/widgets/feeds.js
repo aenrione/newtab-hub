@@ -41,8 +41,7 @@ Hub.registry.register("feeds", {
 
         var rows = feed.entries.map(function (e) {
           return '<a class="feed-row" href="' + Hub.escapeHtml(e.link) + '" target="_self" rel="noreferrer" ' +
-            'data-focusable="true" data-title="' + Hub.escapeHtml(e.title) + '" ' +
-            'data-search-text="' + Hub.escapeHtml(e.title + " " + feed.title) + '">' +
+            'data-focusable="true" data-title="' + Hub.escapeHtml(e.title) + '">' +
             '<span class="feed-headline">' + Hub.escapeHtml(e.title) + '</span>' +
             '<span class="feed-date">' + Hub.formatDate(e.date) + '</span></a>';
         }).join("");
