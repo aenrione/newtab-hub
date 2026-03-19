@@ -16,6 +16,7 @@ Hub.help = (function () {
     ["Enter", "Open focused link"],
     ["U", "Scroll up"],
     ["D", "Scroll down"],
+    ["Z", "Toggle zen mode"],
     ["?", "Show this help"],
     ["Escape", "Close dialog / blur search"]
   ];

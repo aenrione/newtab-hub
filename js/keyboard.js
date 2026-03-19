@@ -90,6 +90,7 @@ Hub.keyboard = (function () {
       if (!typing && key === "/") { e.preventDefault(); Hub.focusSearch(); return; }
 
       if (!typing && key === "?") { e.preventDefault(); Hub.help.show(); return; }
+      if (!typing && key === "z") { e.preventDefault(); Hub.zen.toggle(); Hub.zen.updateButtonIcon(); return; }
 
       if (!typing && /^[1-9]$/.test(e.key)) {
         var st = getState();
