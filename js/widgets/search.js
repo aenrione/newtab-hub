@@ -9,7 +9,7 @@ Hub.registry.register("search", {
     container.innerHTML =
       '<label class="search-wrap" for="quick-search">' +
         '<span class="search-icon">/</span>' +
-        '<input id="quick-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search links, feeds, or type a URL" />' +
+        '<input id="quick-search" type="search" autocomplete="off" spellcheck="false" autofocus placeholder="Search links, feeds, or type a URL" />' +
       '</label>' +
       '<div id="search-results" class="search-results hidden" aria-live="polite"></div>';
   },

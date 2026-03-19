@@ -17,8 +17,10 @@ Hub.help = (function () {
     ["U", "Scroll up"],
     ["D", "Scroll down"],
     ["Z", "Toggle zen mode"],
+    ["<key>", "Focus widget group (shown on headers)"],
+    ["<key> + 1-9", "Open Nth item in focused group"],
     ["?", "Show this help"],
-    ["Escape", "Close dialog / blur search"]
+    ["Escape", "Close dialog / blur search / cancel chord"]
   ];
 
   function create() {

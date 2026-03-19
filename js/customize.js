@@ -151,7 +151,7 @@ Hub.customize = (function () {
     /* Background image */
     var bgLabel = document.createElement("p");
     bgLabel.className = "customize-label";
-    bgLabel.textContent = "Background image";
+    bgLabel.textContent = "Background";
     sidebar.appendChild(bgLabel);
 
     var bgWrap = document.createElement("div");
@@ -167,7 +167,9 @@ Hub.customize = (function () {
         bgFitSelect.value = currentBg.fit;
         bgSurfaceRange.value = currentBg.surfaceOpacity;
         bgSurfaceDisplay.textContent = Math.round(currentBg.surfaceOpacity * 100) + "%";
-        if (currentBg.src) bgPreview.style.backgroundImage = Hub.cssUrl(currentBg.src);
+        currentBg.type = Hub.detectBgType(currentBg.src);
+        if (currentBg.src) updatePreview();
+        updateVideoControls();
       }
     });
 
@@ -177,13 +179,34 @@ Hub.customize = (function () {
     bgUrlRow.innerHTML = '<span>Image URL</span>';
     var bgUrlInput = document.createElement("input");
     bgUrlInput.type = "text";
-    bgUrlInput.placeholder = "https://example.com/image.jpg";
+    bgUrlInput.placeholder = "https://example.com/image.jpg or video.mp4";
     var bgUrlTimer = 0;
     bgUrlInput.addEventListener("input", function () {
       currentBg.src = bgUrlInput.value.trim();
-      bgPreview.style.backgroundImage = currentBg.src ? Hub.cssUrl(currentBg.src) : "";
-      clearTimeout(bgUrlTimer);
-      bgUrlTimer = setTimeout(function () { Hub.applyBgImage(currentBg); }, 300);
+      currentBg.type = Hub.detectBgType(currentBg.src);
+      updateVideoControls();
+      bgWarn.style.display = "none";
+      if (currentBg.type === "video") {
+        /* Don't apply video on every keystroke — wait for blur/Enter */
+        bgPreview.style.backgroundImage = "";
+        clearTimeout(bgUrlTimer);
+      } else {
+        bgPreview.style.backgroundImage = currentBg.src ? Hub.cssUrl(currentBg.src) : "";
+        clearTimeout(bgUrlTimer);
+        bgUrlTimer = setTimeout(function () { Hub.applyBgImage(currentBg); }, 300);
+      }
+    });
+    bgUrlInput.addEventListener("blur", function () {
+      if (currentBg.type === "video" && currentBg.src) {
+        Hub.applyBgImage(currentBg);
+        updatePreview();
+      }
+    });
+    bgUrlInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && currentBg.type === "video" && currentBg.src) {
+        Hub.applyBgImage(currentBg);
+        updatePreview();
+      }
     });
     bgUrlRow.appendChild(bgUrlInput);
     bgWrap.appendChild(bgUrlRow);
@@ -197,20 +220,50 @@ Hub.customize = (function () {
     bgUploadBtn.textContent = "Upload file";
     var bgFileInput = document.createElement("input");
     bgFileInput.type = "file";
-    bgFileInput.accept = "image/*";
+    bgFileInput.accept = "image/*,video/mp4,video/webm";
     bgFileInput.style.display = "none";
     bgUploadBtn.addEventListener("click", function () { bgFileInput.click(); });
     bgFileInput.addEventListener("change", function () {
       var file = bgFileInput.files[0];
       if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        currentBg.src = ev.target.result;
-        bgUrlInput.value = "(uploaded file)";
+      currentBg.type = Hub.detectBgType(null, file.type);
+      currentBg.mimeType = file.type;
+      updateVideoControls();
+      bgWarn.style.display = "none";
+
+      /* Revoke previous object URL if any */
+      if (Hub._bgObjectUrl) {
+        URL.revokeObjectURL(Hub._bgObjectUrl);
+        Hub._bgObjectUrl = null;
+      }
+
+      if (file.size > 5 * 1024 * 1024 && currentBg.type === "video") {
+        bgWarn.textContent = "Video too large to persist — it will play now but won't survive a restart. Use a URL instead.";
+        bgWarn.style.display = "";
+      } else if (file.size > 10 * 1024 * 1024) {
+        bgWarn.textContent = "Large file — consider using a URL for better performance";
+        bgWarn.style.display = "";
+      }
+
+      if (currentBg.type === "video") {
+        /* Use object URL for video (data URIs too large for storage) */
+        Hub._bgObjectUrl = URL.createObjectURL(file);
+        currentBg.src = Hub._bgObjectUrl;
+        currentBg._isObjectUrl = true;
+        bgUrlInput.value = "(uploaded video)";
         Hub.applyBgImage(currentBg);
-        bgPreview.style.backgroundImage = Hub.cssUrl(currentBg.src);
-      };
-      reader.readAsDataURL(file);
+        updatePreview();
+      } else {
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          currentBg.src = ev.target.result;
+          currentBg._isObjectUrl = false;
+          bgUrlInput.value = "(uploaded file)";
+          Hub.applyBgImage(currentBg);
+          bgPreview.style.backgroundImage = Hub.cssUrl(currentBg.src);
+        };
+        reader.readAsDataURL(file);
+      }
     });
     bgUploadRow.appendChild(bgUploadBtn);
     bgUploadRow.appendChild(bgFileInput);
@@ -220,15 +273,49 @@ Hub.customize = (function () {
     bgClearBtn.className = "toolbar-button toolbar-button-ghost";
     bgClearBtn.textContent = "Clear";
     bgClearBtn.addEventListener("click", function () {
-      currentBg.src = "";
+      currentBg = Object.assign({}, Hub.DEFAULT_BG);
       bgUrlInput.value = "";
       Hub.applyBgImage(null);
       bgPreview.style.backgroundImage = "";
+      var pvVid = bgPreview.querySelector("video");
+      if (pvVid) pvVid.remove();
+      bgWarn.style.display = "none";
+      if (Hub._bgObjectUrl) {
+        URL.revokeObjectURL(Hub._bgObjectUrl);
+        Hub._bgObjectUrl = null;
+      }
+      updateVideoControls();
     });
     bgUploadRow.appendChild(bgClearBtn);
     bgWrap.appendChild(bgUploadRow);
 
+    var bgWarn = document.createElement("p");
+    bgWarn.className = "bg-warn";
+    bgWarn.style.display = "none";
+    bgWrap.appendChild(bgWarn);
+
     /* Preview */
+    function updatePreview() {
+      bgPreview.style.backgroundImage = "";
+      var existingVid = bgPreview.querySelector("video");
+      if (existingVid) existingVid.remove();
+
+      if (!currentBg.src) return;
+
+      if ((currentBg.type || Hub.detectBgType(currentBg.src)) === "video") {
+        var pv = document.createElement("video");
+        pv.autoplay = true;
+        pv.muted = true;
+        pv.loop = true;
+        pv.playsInline = true;
+        pv.src = currentBg.src;
+        pv.style.cssText = "width:100%;height:100%;object-fit:cover;";
+        bgPreview.appendChild(pv);
+      } else {
+        bgPreview.style.backgroundImage = Hub.cssUrl(currentBg.src);
+      }
+    }
+
     var bgPreview = document.createElement("div");
     bgPreview.className = "bg-image-preview";
     bgWrap.appendChild(bgPreview);
@@ -290,6 +377,90 @@ Hub.customize = (function () {
     bgFitRow.appendChild(bgFitSelect);
     bgWrap.appendChild(bgFitRow);
 
+    /* ── Video-only controls ── */
+    var videoControlsWrap = document.createElement("div");
+    videoControlsWrap.className = "bg-video-controls";
+    videoControlsWrap.style.display = "none";
+
+    /* Speed slider */
+    var bgSpeedRow = document.createElement("label");
+    bgSpeedRow.className = "style-control-row";
+    bgSpeedRow.innerHTML = '<span>Speed</span>';
+    var bgSpeedRange = document.createElement("input");
+    bgSpeedRange.type = "range";
+    bgSpeedRange.min = "0.25";
+    bgSpeedRange.max = "2";
+    bgSpeedRange.step = "0.25";
+    bgSpeedRange.value = "1";
+    var bgSpeedDisplay = document.createElement("span");
+    bgSpeedDisplay.className = "style-value";
+    bgSpeedDisplay.textContent = "1x";
+    bgSpeedRange.addEventListener("input", function () {
+      currentBg.playbackRate = parseFloat(bgSpeedRange.value);
+      bgSpeedDisplay.textContent = currentBg.playbackRate + "x";
+      Hub.applyBgImage(currentBg);
+    });
+    bgSpeedRow.appendChild(bgSpeedRange);
+    bgSpeedRow.appendChild(bgSpeedDisplay);
+    videoControlsWrap.appendChild(bgSpeedRow);
+
+    /* Quality dropdown */
+    var bgQualityRow = document.createElement("label");
+    bgQualityRow.className = "style-control-row";
+    bgQualityRow.innerHTML = '<span>Quality</span>';
+    var bgQualitySelect = document.createElement("select");
+    bgQualitySelect.innerHTML = '<option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>';
+    var bgQualityHint = document.createElement("span");
+    bgQualityHint.className = "style-hint";
+    bgQualityHint.textContent = "Lower = less battery";
+    bgQualitySelect.addEventListener("change", function () {
+      currentBg.quality = bgQualitySelect.value;
+      Hub.applyBgImage(currentBg);
+    });
+    bgQualityRow.appendChild(bgQualitySelect);
+    bgQualityRow.appendChild(bgQualityHint);
+    videoControlsWrap.appendChild(bgQualityRow);
+
+    /* Pause/Play toggle */
+    var bgPauseBtn = document.createElement("button");
+    bgPauseBtn.type = "button";
+    bgPauseBtn.className = "toolbar-button";
+    bgPauseBtn.textContent = "Pause";
+    bgPauseBtn.addEventListener("click", function () {
+      var vid = document.getElementById("hub-bg-video");
+      if (!vid) return;
+      if (vid.paused) {
+        Hub._bgManualPause = false;
+        vid.play().catch(function () {});
+        bgPauseBtn.textContent = "Pause";
+      } else {
+        Hub._bgManualPause = true;
+        vid.pause();
+        bgPauseBtn.textContent = "Play";
+      }
+    });
+    videoControlsWrap.appendChild(bgPauseBtn);
+
+    bgWrap.appendChild(videoControlsWrap);
+
+    /* Show/hide video controls based on type */
+    function updateVideoControls() {
+      var isVideo = currentBg.type === "video";
+      videoControlsWrap.style.display = isVideo ? "" : "none";
+      if (isVideo) {
+        bgSpeedRange.value = currentBg.playbackRate || 1;
+        bgSpeedDisplay.textContent = (currentBg.playbackRate || 1) + "x";
+        bgQualitySelect.value = currentBg.quality || "auto";
+        bgPauseBtn.textContent = "Pause";
+      }
+    }
+
+    /* Register error callback so applyBgImage can surface errors to UI */
+    Hub._bgErrorCallback = function (msg) {
+      bgWarn.textContent = msg;
+      bgWarn.style.display = "";
+    };
+
     sidebar.appendChild(bgWrap);
 
     /* Custom CSS */
@@ -320,7 +491,15 @@ Hub.customize = (function () {
       await Hub.saveThemeOverride(store, profileName, colors, isGlobal);
       await store.set(Hub.STORAGE_STYLE_KEY, currentStyles);
       await store.set(Hub.STORAGE_CUSTOM_CSS_KEY, cssTextarea.value || "");
-      await Hub.saveBgImage(store, currentBg);
+      var bgToSave = Object.assign({}, currentBg);
+      if (bgToSave._isObjectUrl) {
+        bgWarn.textContent = "Video won't persist after restart — use a URL instead";
+        bgWarn.style.display = "";
+        bgToSave.src = "";
+      }
+      delete bgToSave._isObjectUrl;
+      delete bgToSave.mimeType;
+      await Hub.saveBgImage(store, bgToSave);
       closeThemeSidebar();
     });
 
@@ -332,6 +511,14 @@ Hub.customize = (function () {
       await store.set(Hub.STORAGE_STYLE_KEY, {});
       await store.set(Hub.STORAGE_CUSTOM_CSS_KEY, "");
       await Hub.saveBgImage(store, null);
+      var pvVid = bgPreview.querySelector("video");
+      if (pvVid) pvVid.remove();
+      bgWarn.style.display = "none";
+      if (Hub._bgObjectUrl) {
+        URL.revokeObjectURL(Hub._bgObjectUrl);
+        Hub._bgObjectUrl = null;
+      }
+      updateVideoControls();
       grid.querySelectorAll("[data-color-key]").forEach(function (inp) { inp.value = Hub.DEFAULT_COLORS[inp.dataset.colorKey] || "#000000"; });
       cssTextarea.value = "";
       currentBg = Object.assign({}, Hub.DEFAULT_BG);

@@ -251,6 +251,9 @@
     /* Sync render */
     renderAllWidgets();
 
+    /* Focus search immediately after DOM is ready — don't wait for async loads */
+    Hub.focusSearch();
+
     /* Set search base URL from search widget config */
     var searchWidget = widgets.find(function (w) { return w.type === "search"; });
     if (searchWidget && searchWidget.config) {
@@ -273,6 +276,9 @@
 
     if (token !== state.renderToken) return;
     scheduleHealthRefresh();
+
+    /* Assign chord key shortcuts to widgets */
+    Hub.keyboard.assignWidgetKeys();
 
     /* Search index (deduplicated by href) */
     Hub.search.state.indexFn = function () {
@@ -298,7 +304,12 @@
 
   Hub.focusSearch = function () {
     var input = document.getElementById("quick-search");
-    if (input) { input.focus(); input.select(); }
+    if (!input) return;
+    if (window.__flushEarlyKeys) { window.__flushEarlyKeys(); delete window.__flushEarlyKeys; return; }
+    /* Don't disrupt the user if they're already typing */
+    if (document.activeElement === input) return;
+    input.focus();
+    if (!input.value) input.select();
   };
 
   /* ── Topbar clock ── */
@@ -552,6 +563,8 @@
     Hub.zen.init(function () { return state; });
 
     await renderDashboard(activeProfile);
+
+    Hub.focusSearch();
   }
 
   init().catch(function (err) { console.error("Failed to initialize New Tab Hub", err); });

@@ -68,6 +68,154 @@ Hub.keyboard = (function () {
     arrowup: "up", k: "up"
   };
 
+  /* ── Widget chord shortcuts (e.g. "t2" to open item 2 in group T) ── */
+
+  /* Ergonomic priority: home row center outward, top row, bottom row.
+     Excludes keys already bound: h j k l d u z */
+  var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
+  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1 };
+
+  var chordState = { active: false, container: null, key: null, timer: null };
+  var widgetKeyMap = {}; /* letter → { widgetEl, container, title } */
+
+  function clearChord() {
+    if (chordState.timer) clearTimeout(chordState.timer);
+    if (chordState.container) chordState.container.classList.remove("chord-active");
+    document.querySelectorAll(".chord-index").forEach(function (el) { el.remove(); });
+    chordState = { active: false, container: null, key: null, timer: null };
+  }
+
+  function getWidgetTitle(widgetEl) {
+    var h = widgetEl.querySelector("h2, h3, summary h3");
+    return h ? h.textContent.trim() : "";
+  }
+
+  function getContainerFocusables(container) {
+    return Array.from(container.querySelectorAll('[data-focusable="true"]')).filter(function (n) {
+      return n.offsetParent !== null && n.tagName !== "INPUT" && n.tagName !== "TEXTAREA";
+    });
+  }
+
+  function assignWidgetKeys() {
+    widgetKeyMap = {};
+    var used = {};
+    var widgets = Array.from(document.querySelectorAll(".widget[data-widget-type]")).filter(function (el) {
+      return el.dataset.widgetType !== "pinned-links" && el.dataset.widgetType !== "search" && el.dataset.widgetType !== "clock";
+    });
+
+    /* For widgets with details.group inside, treat each group as a separate entry */
+    var entries = [];
+    widgets.forEach(function (el) {
+      var groups = el.querySelectorAll("details.group");
+      if (groups.length) {
+        groups.forEach(function (g) { entries.push({ widgetEl: el, container: g, title: g.dataset.groupTitle || "" }); });
+      } else {
+        entries.push({ widgetEl: el, container: el, title: getWidgetTitle(el) });
+      }
+    });
+
+    entries.forEach(function (entry) {
+      var title = entry.title.toLowerCase().replace(/[^a-z]/g, "");
+      var assigned = null;
+
+      /* Collect unique letters from title, sorted by ergonomic priority */
+      var titleLetters = [];
+      for (var i = 0; i < title.length; i++) {
+        if (!titleLetters.includes(title[i])) titleLetters.push(title[i]);
+      }
+      titleLetters.sort(function (a, b) {
+        var ai = ERGO_KEYS.indexOf(a), bi = ERGO_KEYS.indexOf(b);
+        if (ai === -1) ai = 999;
+        if (bi === -1) bi = 999;
+        return ai - bi;
+      });
+
+      for (var j = 0; j < titleLetters.length; j++) {
+        var ch = titleLetters[j];
+        if (!RESERVED[ch] && !used[ch]) { assigned = ch; break; }
+      }
+
+      /* Fallback: first available ergonomic key */
+      if (!assigned) {
+        for (var k = 0; k < ERGO_KEYS.length; k++) {
+          if (!used[ERGO_KEYS[k]]) { assigned = ERGO_KEYS[k]; break; }
+        }
+      }
+
+      if (assigned) {
+        used[assigned] = true;
+        widgetKeyMap[assigned] = { widgetEl: entry.widgetEl, container: entry.container, title: entry.title };
+        entry.container.dataset.chordKey = assigned;
+      }
+    });
+
+    renderKeyBadges();
+  }
+
+  function renderKeyBadges() {
+    document.querySelectorAll(".chord-key-badge").forEach(function (el) { el.remove(); });
+
+    Object.keys(widgetKeyMap).forEach(function (key) {
+      var entry = widgetKeyMap[key];
+      var badge = document.createElement("span");
+      badge.className = "chord-key-badge";
+      badge.textContent = key.toUpperCase();
+
+      var target = entry.container.querySelector(".group-toggle, .widget-header");
+      if (target) target.appendChild(badge);
+    });
+  }
+
+  function enterChord(key) {
+    var entry = widgetKeyMap[key];
+    if (!entry) return false;
+
+    clearChord();
+    chordState.active = true;
+    chordState.key = key;
+    chordState.container = entry.container;
+
+    entry.container.classList.add("chord-active");
+    entry.container.scrollIntoView({ block: "nearest", behavior: "smooth" });
+
+    /* If group is collapsed, open it */
+    if (entry.container.tagName === "DETAILS" && !entry.container.open) {
+      entry.container.open = true;
+    }
+
+    /* Show numbered indices on focusable items */
+    var items = getContainerFocusables(entry.container);
+    items.forEach(function (item, i) {
+      if (i >= 9) return;
+      var idx = document.createElement("span");
+      idx.className = "chord-index";
+      idx.textContent = i + 1;
+      item.appendChild(idx);
+    });
+
+    chordState.timer = setTimeout(clearChord, 1500);
+    return true;
+  }
+
+  function handleChordNumber(num, metaKey) {
+    if (!chordState.active) return false;
+    var entry = widgetKeyMap[chordState.key];
+    if (!entry) { clearChord(); return false; }
+
+    var items = getContainerFocusables(entry.container);
+    var idx = num - 1;
+    if (idx >= 0 && idx < items.length) {
+      var el = items[idx];
+      if (el.href) {
+        Hub.openItem(el.href, metaKey);
+      } else {
+        el.click();
+      }
+    }
+    clearChord();
+    return true;
+  }
+
   function bind(getState) {
     document.addEventListener("keydown", function (e) {
       var key = e.key.toLowerCase();
@@ -92,14 +240,33 @@ Hub.keyboard = (function () {
       if (!typing && key === "?") { e.preventDefault(); Hub.help.show(); return; }
       if (!typing && key === "z") { e.preventDefault(); Hub.zen.toggle(); Hub.zen.updateButtonIcon(); return; }
 
-      if (!typing && /^[1-9]$/.test(e.key)) {
+      /* Chord mode: number or escape while chord is active */
+      if (!typing && chordState.active) {
+        if (key === "escape") { e.preventDefault(); clearChord(); return; }
+        if (/^[1-9]$/.test(e.key)) {
+          e.preventDefault();
+          handleChordNumber(Number(e.key), e.metaKey || e.ctrlKey);
+          return;
+        }
+        /* Any other key cancels chord and falls through */
+        clearChord();
+      }
+
+      if (!typing && !e.metaKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
         var st = getState();
         var item = st.pinned[Number(e.key) - 1];
-        if (item) { e.preventDefault(); Hub.openItem(item.href, e.metaKey || e.ctrlKey); }
+        if (item) { e.preventDefault(); Hub.openItem(item.href, false); }
         return;
       }
 
       if (typing) return;
+
+      /* Chord mode: letter press to enter chord (skip if modifier held) */
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && widgetKeyMap[key]) {
+        e.preventDefault();
+        enterChord(key);
+        return;
+      }
 
       if (DIR_MAP[key]) { e.preventDefault(); navigate(DIR_MAP[key]); return; }
       if (key === "d") { e.preventDefault(); window.scrollBy({ top: Math.round(window.innerHeight * 0.6), behavior: "smooth" }); return; }
@@ -112,5 +279,12 @@ Hub.keyboard = (function () {
     });
   }
 
-  return { bind: bind, highlight: highlight, navigate: navigate, getFocusIndex: function () { return focusIndex; } };
+  return {
+    bind: bind,
+    highlight: highlight,
+    navigate: navigate,
+    getFocusIndex: function () { return focusIndex; },
+    assignWidgetKeys: assignWidgetKeys,
+    clearChord: clearChord
+  };
 })();

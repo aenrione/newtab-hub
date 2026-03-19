@@ -3,7 +3,7 @@
 window.Hub = window.Hub || {};
 
 Hub.zen = (function () {
-  var IDLE_TIMEOUT = 10000; // 10 seconds
+  var IDLE_TIMEOUT = 5000; // 10 seconds
   var active = false;
   var timer = null;
   var getState = null;
@@ -11,8 +11,10 @@ Hub.zen = (function () {
   var manuallyToggled = false;
 
   function hasBgImage() {
-    var el = document.getElementById("hub-bg-image");
-    return el && el.style.backgroundImage && el.style.backgroundImage !== "none";
+    var img = document.getElementById("hub-bg-image");
+    if (img && img.style.backgroundImage && img.style.backgroundImage !== "none") return true;
+    var vid = document.getElementById("hub-bg-video");
+    return !!vid;
   }
 
   function shouldBlockZen() {
