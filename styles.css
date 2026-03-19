@@ -74,7 +74,7 @@ body, input, select, button, textarea { font-family: var(--font-body); }
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
@@ -82,6 +82,8 @@ body, input, select, button, textarea { font-family: var(--font-body); }
   font-weight: 700;
   cursor: pointer;
   transition: background 120ms, border-color 120ms;
+  position: relative;
+  overflow: hidden;
 }
 .topbar-icon:hover { background: var(--surface-hover); border-color: var(--border-strong); color: var(--text); }
 .topbar-icon svg { width: 14px; height: 14px; }
@@ -103,7 +105,7 @@ body, input, select, button, textarea { font-family: var(--font-body); }
   position: relative;
 }
 /* Surface opacity layer — shared by elements that need translucent backgrounds */
-.widget::before, .search-wrap::before {
+.widget::before, .search-wrap::before, .topbar-icon::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -136,8 +138,8 @@ body, input, select, button, textarea { font-family: var(--font-body); }
   gap: 10px;
   height: 46px;
   padding: 0 14px;
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
   background: transparent;
   position: relative;
   transition: box-shadow 120ms;
@@ -165,6 +167,10 @@ body, input, select, button, textarea { font-family: var(--font-body); }
   font-size: 1rem;
 }
 #quick-search::placeholder { color: var(--muted); }
+#quick-search::-webkit-search-decoration,
+#quick-search::-webkit-search-cancel-button,
+#quick-search::-webkit-search-results-button,
+#quick-search::-webkit-search-results-decoration { -webkit-appearance: none; display: none; }
 
 .search-results {
   position: absolute;
