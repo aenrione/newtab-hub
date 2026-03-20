@@ -18,6 +18,90 @@ Hub.grid = (function () {
   }
   function getEditClone() { return editClone; }
 
+  /* ── Collision detection & resolution ── */
+
+  /* Check if two layout items overlap (AABB test) */
+  function collides(a, b) {
+    if (a.widget === b.widget) return false;
+    return !(
+      a.col + a.width <= b.col ||
+      b.col + b.width <= a.col ||
+      a.row + a.height <= b.row ||
+      b.row + b.height <= a.row
+    );
+  }
+
+  /* Find all items that collide with the given item */
+  function getCollisions(layout, item) {
+    return layout.filter(function (other) { return collides(item, other); });
+  }
+
+  /* Push colliding items downward to make room for movedItem.
+     Recursively handles cascading collisions. */
+  function resolveCollisions(layout, movedItem) {
+    var collisions = getCollisions(layout, movedItem);
+    for (var i = 0; i < collisions.length; i++) {
+      var other = collisions[i];
+      /* Push the colliding item below the moved item */
+      other.row = movedItem.row + movedItem.height;
+      /* Recursively resolve any new collisions caused by this push */
+      resolveCollisions(layout, other);
+    }
+  }
+
+  /* Compact the layout vertically: move each item as high as possible
+     without colliding with any item above it. */
+  function compact(layout) {
+    var sorted = layout.slice().sort(function (a, b) {
+      return a.row !== b.row ? a.row - b.row : a.col - b.col;
+    });
+
+    for (var i = 0; i < sorted.length; i++) {
+      var item = sorted[i];
+      while (item.row > 1) {
+        var candidate = Object.assign({}, item, { row: item.row - 1 });
+        var blocked = false;
+        for (var j = 0; j < sorted.length; j++) {
+          if (sorted[j].widget !== item.widget && collides(candidate, sorted[j])) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) break;
+        item.row = candidate.row;
+      }
+    }
+  }
+
+  /* Build a layout array from current DOM state */
+  function buildLayoutFromGrid(gridEl) {
+    var items = [];
+    gridEl.querySelectorAll(".widget[data-grid-widget]").forEach(function (el) {
+      items.push({
+        widget: el.dataset.gridWidget,
+        col: parseInt(el.dataset.gridCol) || 1,
+        row: parseInt(el.dataset.gridRow) || 1,
+        width: parseInt(el.dataset.gridWidth) || 4,
+        height: parseInt(el.dataset.gridHeight) || 1,
+        el: el
+      });
+    });
+    return items;
+  }
+
+  /* Apply resolved layout positions back to all DOM elements */
+  function syncLayoutToDOM(layout) {
+    layout.forEach(function (item) {
+      if (!item.el) return;
+      item.el.style.gridColumn = item.col + " / span " + item.width;
+      item.el.style.gridRow = item.row + " / span " + item.height;
+      item.el.dataset.gridCol = item.col;
+      item.el.dataset.gridRow = item.row;
+      item.el.dataset.gridWidth = item.width;
+      item.el.dataset.gridHeight = item.height;
+    });
+  }
+
   function applyLayout(gridEl, layout, widgetEls) {
     var sorted = layout.slice().sort(function (a, b) {
       return a.row !== b.row ? a.row - b.row : a.col - b.col;
@@ -54,13 +138,13 @@ Hub.grid = (function () {
     editBar = document.createElement("div");
     editBar.className = "grid-edit-bar";
     editBar.innerHTML =
-      '<span class="grid-edit-label">Editing layout</span>' +
+      '<span class="grid-edit-label">Editing layout <kbd class="edit-bar-hint">Tab</kbd> cycle <kbd class="edit-bar-hint">\u2190\u2191\u2192\u2193</kbd> move <kbd class="edit-bar-hint">Shift+\u2190\u2191\u2192\u2193</kbd> resize</span>' +
       '<div class="grid-edit-actions">' +
-        '<button class="toolbar-button toolbar-button-ghost edit-bar-add-btn grid-edit-add" type="button">' +
-          Hub.icons.plus + ' Add widget</button>' +
-        '<button class="toolbar-button toolbar-button-ghost grid-edit-cancel" type="button">Cancel</button>' +
-        '<button class="toolbar-button grid-edit-save" type="button">' +
-          Hub.icons.save + ' Save layout</button>' +
+        '<button class="toolbar-button toolbar-button-ghost edit-bar-add-btn grid-edit-add" type="button" title="A">' +
+          Hub.icons.plus + ' Add widget <kbd>A</kbd></button>' +
+        '<button class="toolbar-button toolbar-button-ghost grid-edit-cancel" type="button" title="Escape">Cancel <kbd>Esc</kbd></button>' +
+        '<button class="toolbar-button grid-edit-save" type="button" title="Ctrl/Cmd+S or E">' +
+          Hub.icons.save + ' Save <kbd>\u2318S</kbd></button>' +
       '</div>';
 
     editBar.querySelector(".grid-edit-save").addEventListener("click", function () {
@@ -132,19 +216,66 @@ Hub.grid = (function () {
     document.body.appendChild(overlay);
 
     function close() {
+      document.removeEventListener("keydown", onConfigKey);
       overlay.remove();
       if (onSave) onSave();
     }
     closeBtn.addEventListener("click", close);
     doneBtn.addEventListener("click", close);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-    document.addEventListener("keydown", function onEsc(e) {
-      if (e.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); }
+
+    /* Keyboard navigation for config modal */
+    function getFocusableElements() {
+      return Array.from(panel.querySelectorAll('input, select, textarea, button:not(.modal-close), [tabindex]:not([tabindex="-1"])'))
+        .filter(function (el) { return el.offsetParent !== null; });
+    }
+
+    function onConfigKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+
+      /* Enter on Done button or when not in textarea */
+      if (e.key === "Enter" && document.activeElement !== doneBtn && document.activeElement.tagName !== "TEXTAREA") {
+        /* If in an input, move to next input; if last input, close */
+        var focusable = getFocusableElements();
+        var idx = focusable.indexOf(document.activeElement);
+        if (idx >= 0 && idx < focusable.length - 1) {
+          e.preventDefault();
+          focusable[idx + 1].focus();
+        } else {
+          e.preventDefault();
+          close();
+        }
+        return;
+      }
+
+      /* Tab trap: keep focus within modal */
+      if (e.key === "Tab") {
+        var focusable = getFocusableElements();
+        if (!focusable.length) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onConfigKey);
+
+    /* Auto-focus first input */
+    requestAnimationFrame(function () {
+      var firstInput = panel.querySelector("input, select, textarea");
+      if (firstInput) firstInput.focus();
+      else doneBtn.focus();
     });
   }
 
   function openAddWidgetModal(gridEl, onAdded) {
     var addable = Hub.registry.addable();
+    var focusedCardIndex = -1;
 
     var overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -172,17 +303,32 @@ Hub.grid = (function () {
     searchWrap.appendChild(searchInput);
 
     /* Card grid */
-    var grid = document.createElement("div");
-    grid.className = "add-widget-grid";
+    var cardGrid = document.createElement("div");
+    cardGrid.className = "add-widget-grid";
+
+    function selectCard(card) {
+      card.click();
+    }
+
+    function focusCard(idx) {
+      var cards = cardGrid.querySelectorAll(".add-widget-card");
+      cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
+      if (idx < 0 || idx >= cards.length) { focusedCardIndex = -1; return; }
+      focusedCardIndex = idx;
+      cards[idx].classList.add("add-widget-card-focus");
+      cards[idx].focus();
+    }
 
     function renderCards(filter) {
-      grid.replaceChildren();
+      cardGrid.replaceChildren();
+      focusedCardIndex = -1;
       var filt = (filter || "").toLowerCase();
       addable.forEach(function (p) {
         if (filt && !p.label.toLowerCase().includes(filt)) return;
         var card = document.createElement("button");
         card.className = "add-widget-card";
         card.type = "button";
+        card.tabIndex = 0;
         var iconKey = Hub.iconForType[p.type] || "plus";
         card.innerHTML = (Hub.icons[iconKey] || "") + "<span>" + Hub.escapeHtml(p.label) + "</span>";
         card.addEventListener("click", function () {
@@ -200,7 +346,7 @@ Hub.grid = (function () {
           close();
           if (onAdded) onAdded(newWidget);
         });
-        grid.appendChild(card);
+        cardGrid.appendChild(card);
       });
     }
 
@@ -209,22 +355,204 @@ Hub.grid = (function () {
 
     panel.appendChild(header);
     panel.appendChild(searchWrap);
-    panel.appendChild(grid);
+    panel.appendChild(cardGrid);
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
     searchInput.focus();
 
-    function close() { overlay.remove(); }
+    function close() {
+      document.removeEventListener("keydown", onModalKey);
+      overlay.remove();
+    }
     closeBtn.addEventListener("click", close);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-    document.addEventListener("keydown", function onEsc(e) {
-      if (e.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); }
-    });
+
+    function onModalKey(e) {
+      var cards = cardGrid.querySelectorAll(".add-widget-card");
+      var numCards = cards.length;
+      var cols = 2; /* grid is 2 columns */
+
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+
+      /* Arrow down or Tab from search → move to cards */
+      if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey && document.activeElement === searchInput)) {
+        if (numCards > 0) {
+          e.preventDefault();
+          focusCard(focusedCardIndex < 0 ? 0 : Math.min(focusedCardIndex + cols, numCards - 1));
+        }
+        return;
+      }
+
+      /* Arrow up from first row → back to search */
+      if (e.key === "ArrowUp") {
+        if (focusedCardIndex < 0 || focusedCardIndex < cols) {
+          e.preventDefault();
+          cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
+          focusedCardIndex = -1;
+          searchInput.focus();
+        } else {
+          e.preventDefault();
+          focusCard(focusedCardIndex - cols);
+        }
+        return;
+      }
+
+      if (e.key === "ArrowRight") {
+        if (focusedCardIndex >= 0 && focusedCardIndex < numCards - 1) {
+          e.preventDefault();
+          focusCard(focusedCardIndex + 1);
+        }
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        if (focusedCardIndex > 0) {
+          e.preventDefault();
+          focusCard(focusedCardIndex - 1);
+        }
+        return;
+      }
+
+      /* Shift+Tab from cards → back to search */
+      if (e.key === "Tab" && e.shiftKey && focusedCardIndex >= 0) {
+        e.preventDefault();
+        cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
+        focusedCardIndex = -1;
+        searchInput.focus();
+        return;
+      }
+
+      /* Enter on card → select it */
+      if (e.key === "Enter" && focusedCardIndex >= 0 && focusedCardIndex < numCards) {
+        e.preventDefault();
+        selectCard(cards[focusedCardIndex]);
+        return;
+      }
+    }
+
+    document.addEventListener("keydown", onModalKey);
+  }
+
+  /* ── Edit mode keyboard controls ── */
+
+  var editFocusedWidget = null; /* currently keyboard-focused widget element */
+
+  function getEditableWidgets(gridEl) {
+    return Array.from(gridEl.querySelectorAll(".widget.widget-editable"));
+  }
+
+  function setEditFocus(el) {
+    if (editFocusedWidget) editFocusedWidget.classList.remove("edit-focus");
+    editFocusedWidget = el;
+    if (el) {
+      el.classList.add("edit-focus");
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }
+
+  function handleEditKey(e) {
+    var key = e.key;
+    var gridEl = document.getElementById("dashboard-grid");
+    if (!gridEl || !editing) return false;
+
+    var widgets = getEditableWidgets(gridEl);
+    if (!widgets.length) return false;
+
+    /* Tab / Shift+Tab: cycle through widgets */
+    if (key === "Tab") {
+      e.preventDefault();
+      var idx = editFocusedWidget ? widgets.indexOf(editFocusedWidget) : -1;
+      if (e.shiftKey) {
+        idx = idx <= 0 ? widgets.length - 1 : idx - 1;
+      } else {
+        idx = idx >= widgets.length - 1 ? 0 : idx + 1;
+      }
+      setEditFocus(widgets[idx]);
+      return true;
+    }
+
+    if (!editFocusedWidget) return false;
+
+    var w = editFocusedWidget;
+    var col = parseInt(w.dataset.gridCol);
+    var row = parseInt(w.dataset.gridRow);
+    var width = parseInt(w.dataset.gridWidth);
+    var height = parseInt(w.dataset.gridHeight);
+
+    /* Arrow keys: move widget (or resize with Shift) */
+    if (key === "ArrowRight" || key === "ArrowLeft" || key === "ArrowDown" || key === "ArrowUp") {
+      e.preventDefault();
+
+      if (e.shiftKey) {
+        /* Resize */
+        if (key === "ArrowRight") width = Math.min(COLS - col + 1, width + 1);
+        else if (key === "ArrowLeft") width = Math.max(1, width - 1);
+        else if (key === "ArrowDown") height = height + 1;
+        else if (key === "ArrowUp") height = Math.max(1, height - 1);
+
+        w.dataset.gridWidth = width;
+        w.dataset.gridHeight = height;
+      } else {
+        /* Move */
+        if (key === "ArrowRight") col = Math.min(COLS - width + 1, col + 1);
+        else if (key === "ArrowLeft") col = Math.max(1, col - 1);
+        else if (key === "ArrowDown") row = row + 1;
+        else if (key === "ArrowUp") row = Math.max(1, row - 1);
+
+        w.dataset.gridCol = col;
+        w.dataset.gridRow = row;
+      }
+
+      /* Resolve collisions and compact */
+      var layout = buildLayoutFromGrid(gridEl);
+      var movedItem = layout.find(function (it) { return it.widget === w.dataset.gridWidget; });
+      if (movedItem) {
+        movedItem.col = col;
+        movedItem.row = row;
+        movedItem.width = width;
+        movedItem.height = height;
+        resolveCollisions(layout, movedItem);
+        compact(layout);
+        syncLayoutToDOM(layout);
+      } else {
+        w.style.gridColumn = col + " / span " + width;
+        w.style.gridRow = row + " / span " + height;
+      }
+      return true;
+    }
+
+    /* G: open config */
+    if (key === "g" && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      var gearBtn = w.querySelector(".widget-edit-btn.is-gear");
+      if (gearBtn) gearBtn.click();
+      return true;
+    }
+
+    /* X or Delete: remove widget */
+    if ((key === "x" || key === "Delete" || key === "Backspace") && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      var widgetId = w.dataset.widgetId;
+      var nextWidgets = getEditableWidgets(gridEl);
+      var idx = nextWidgets.indexOf(w);
+      removeWidget(widgetId, gridEl);
+      /* Focus next widget */
+      nextWidgets = getEditableWidgets(gridEl);
+      if (nextWidgets.length) {
+        setEditFocus(nextWidgets[Math.min(idx, nextWidgets.length - 1)]);
+      } else {
+        setEditFocus(null);
+      }
+      return true;
+    }
+
+    return false;
   }
 
   function enterEditMode(gridEl, layout, onSave, onCancel, onAdded, onConfigSave) {
     editing = true;
+    editFocusedWidget = null;
     gridEl.classList.add("grid-editing");
 
     showEditBar(onSave, onCancel, gridEl, onAdded);
@@ -307,30 +635,58 @@ Hub.grid = (function () {
         var colDelta = Math.round(dx / cellW);
         var rowDelta = Math.round(dy / rowH);
         var w = parseInt(dragWidget.el.dataset.gridWidth);
+        var h = parseInt(dragWidget.el.dataset.gridHeight);
         var newCol = Math.max(1, Math.min(COLS - w + 1, dragWidget.origCol + colDelta));
         var newRow = Math.max(1, dragWidget.origRow + rowDelta);
 
-        dragWidget.el.style.gridColumn = newCol + " / span " + w;
-        dragWidget.el.style.gridRow = newRow + " / span " + dragWidget.el.dataset.gridHeight;
+        /* Update the dragged widget position */
         dragWidget.el.dataset.gridCol = newCol;
         dragWidget.el.dataset.gridRow = newRow;
+
+        /* Build layout, resolve collisions, compact, sync DOM */
+        var layout = buildLayoutFromGrid(gridEl);
+        var movedItem = layout.find(function (it) { return it.widget === dragWidget.el.dataset.gridWidget; });
+        if (movedItem) {
+          movedItem.col = newCol;
+          movedItem.row = newRow;
+          resolveCollisions(layout, movedItem);
+          compact(layout);
+          syncLayoutToDOM(layout);
+        }
       }
 
       if (resizeWidget) {
         var rdx = e.clientX - resizeWidget.startX;
         var rdy = e.clientY - resizeWidget.startY;
         var col = parseInt(resizeWidget.el.dataset.gridCol);
+        var row = parseInt(resizeWidget.el.dataset.gridRow);
         var newW = Math.max(1, Math.min(COLS - col + 1, resizeWidget.origWidth + Math.round(rdx / cellW)));
         var newH = Math.max(1, resizeWidget.origHeight + Math.round(rdy / rowH));
 
-        resizeWidget.el.style.gridColumn = col + " / span " + newW;
-        resizeWidget.el.style.gridRow = resizeWidget.el.dataset.gridRow + " / span " + newH;
+        /* Update the resized widget */
         resizeWidget.el.dataset.gridWidth = newW;
         resizeWidget.el.dataset.gridHeight = newH;
+
+        /* Build layout, resolve collisions, compact, sync DOM */
+        var layout = buildLayoutFromGrid(gridEl);
+        var resizedItem = layout.find(function (it) { return it.widget === resizeWidget.el.dataset.gridWidget; });
+        if (resizedItem) {
+          resizedItem.width = newW;
+          resizedItem.height = newH;
+          resolveCollisions(layout, resizedItem);
+          compact(layout);
+          syncLayoutToDOM(layout);
+        }
       }
     }
 
     function onMouseUp() {
+      if (dragWidget || resizeWidget) {
+        /* Final compaction pass on drop */
+        var layout = buildLayoutFromGrid(gridEl);
+        compact(layout);
+        syncLayoutToDOM(layout);
+      }
       dragWidget = null;
       resizeWidget = null;
     }
@@ -348,6 +704,7 @@ Hub.grid = (function () {
     return function exitEditMode() {
       document.removeEventListener("keydown", onEditEscape);
       editing = false;
+      setEditFocus(null);
       gridEl.classList.remove("grid-editing");
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
@@ -382,6 +739,7 @@ Hub.grid = (function () {
     setEditClone: setEditClone,
     getEditClone: getEditClone,
     openConfigModal: openConfigModal,
-    openAddWidgetModal: openAddWidgetModal
+    openAddWidgetModal: openAddWidgetModal,
+    handleEditKey: handleEditKey
   };
 })();

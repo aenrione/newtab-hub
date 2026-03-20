@@ -83,8 +83,32 @@ Hub.customize = (function () {
       if (!matches.length) dropdown.innerHTML = '<div class="preset-empty">No matching themes</div>';
     }
 
-    searchInput.addEventListener("focus", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); });
-    searchInput.addEventListener("input", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); });
+    var presetFocusIdx = -1;
+
+    function focusPresetOption(idx) {
+      var opts = dropdown.querySelectorAll(".preset-option");
+      opts.forEach(function (o) { o.classList.remove("preset-option-focus"); });
+      if (idx < 0 || idx >= opts.length) { presetFocusIdx = -1; return; }
+      presetFocusIdx = idx;
+      opts[idx].classList.add("preset-option-focus");
+      opts[idx].scrollIntoView({ block: "nearest" });
+    }
+
+    searchInput.addEventListener("focus", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); presetFocusIdx = -1; });
+    searchInput.addEventListener("input", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); presetFocusIdx = -1; });
+    searchInput.addEventListener("keydown", function (e) {
+      var opts = dropdown.querySelectorAll(".preset-option");
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        focusPresetOption(presetFocusIdx < opts.length - 1 ? presetFocusIdx + 1 : 0);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        focusPresetOption(presetFocusIdx > 0 ? presetFocusIdx - 1 : opts.length - 1);
+      } else if (e.key === "Enter" && presetFocusIdx >= 0 && presetFocusIdx < opts.length) {
+        e.preventDefault();
+        opts[presetFocusIdx].click();
+      }
+    });
     document.addEventListener("click", function (e) { if (!presetRow.contains(e.target)) dropdown.classList.remove("is-open"); });
     presetSection.appendChild(presetRow);
     sidebar.appendChild(presetSection);
@@ -482,6 +506,8 @@ Hub.customize = (function () {
     actions.className = "theme-actions";
     actions.innerHTML =
       '<button class="toolbar-button toolbar-button-ghost" data-theme-reset type="button">Reset all</button>' +
+      '<button class="toolbar-button toolbar-button-ghost" data-theme-export type="button">Export</button>' +
+      '<button class="toolbar-button toolbar-button-ghost" data-theme-import type="button">Import</button>' +
       '<button class="toolbar-button" data-theme-save type="button">Save</button>';
 
     actions.querySelector("[data-theme-save]").addEventListener("click", async function () {
@@ -501,6 +527,78 @@ Hub.customize = (function () {
       delete bgToSave.mimeType;
       await Hub.saveBgImage(store, bgToSave);
       closeThemeSidebar();
+    });
+
+    actions.querySelector("[data-theme-export]").addEventListener("click", async function () {
+      try {
+        var all = await store.getAll();
+        var data = {};
+        var SKIP = { "new-tab-cache": 1, "new-tab-v2-migrated": 1 };
+        Object.keys(all).forEach(function (k) {
+          if (!k.startsWith("new-tab-") || SKIP[k]) return;
+          data[k] = all[k];
+        });
+        /* Sanitize video backgrounds — keep URLs, strip blobs/object URLs */
+        var bg = data[Hub.STORAGE_BG_IMAGE_KEY];
+        if (bg && bg.src) {
+          var isVideo = (bg.type === "video") || Hub.detectBgType(bg.src) === "video";
+          if (isVideo && !bg.src.startsWith("http")) {
+            bg = Object.assign({}, bg, { src: null });
+            data[Hub.STORAGE_BG_IMAGE_KEY] = bg;
+          }
+        }
+        var envelope = { version: 1, exportedAt: new Date().toISOString(), data: data };
+        var blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        var ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = "newtab-hub-backup-" + ts + ".json";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Export failed: " + err.message);
+      }
+    });
+
+    var importFileInput = document.createElement("input");
+    importFileInput.type = "file";
+    importFileInput.accept = ".json";
+    importFileInput.style.display = "none";
+    actions.appendChild(importFileInput);
+
+    actions.querySelector("[data-theme-import]").addEventListener("click", function () {
+      importFileInput.click();
+    });
+
+    importFileInput.addEventListener("change", function () {
+      var file = importFileInput.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { alert("File too large (max 10 MB)"); return; }
+      var reader = new FileReader();
+      reader.onload = async function (ev) {
+        try {
+          var parsed = JSON.parse(ev.target.result);
+        } catch (_) { alert("Invalid file format — could not parse JSON"); return; }
+        if (!parsed || typeof parsed.data !== "object" || !parsed.version) {
+          alert("Not a valid NewTab Hub backup file"); return;
+        }
+        if (parsed.version > 1) {
+          alert("This backup was created by a newer version and cannot be imported"); return;
+        }
+        if (!confirm("This will replace all your current settings. Continue?")) return;
+        try {
+          var keys = Object.keys(parsed.data).filter(function (k) {
+            return k.startsWith("new-tab-") && k !== "new-tab-cache";
+          });
+          for (var i = 0; i < keys.length; i++) {
+            await store.set(keys[i], parsed.data[keys[i]]);
+          }
+          location.reload();
+        } catch (err) { alert("Failed to import settings: " + err.message); }
+      };
+      reader.readAsText(file);
+      importFileInput.value = "";
     });
 
     actions.querySelector("[data-theme-reset]").addEventListener("click", async function () {
@@ -534,6 +632,47 @@ Hub.customize = (function () {
 
     sidebar.classList.add("is-open");
     themeOverlay.classList.add("is-open");
+
+    /* Keyboard navigation for theme sidebar */
+    function getSidebarFocusable() {
+      return Array.from(sidebar.querySelectorAll(
+        'input:not([type="file"]), select, textarea, button:not(.theme-sidebar-close)'
+      )).filter(function (el) { return el.offsetParent !== null && el.style.display !== "none"; });
+    }
+
+    function onSidebarKey(e) {
+      if (!sidebar.classList.contains("is-open")) return;
+
+      if (e.key === "Escape") {
+        /* If preset dropdown open, close it first */
+        if (dropdown.classList.contains("is-open")) {
+          e.preventDefault(); e.stopPropagation();
+          dropdown.classList.remove("is-open");
+          return;
+        }
+        return; /* Let the existing escape handler close the sidebar */
+      }
+
+      /* Tab trap within sidebar */
+      if (e.key === "Tab") {
+        var focusable = getSidebarFocusable();
+        if (!focusable.length) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    sidebar.addEventListener("keydown", onSidebarKey);
+
+    /* Auto-focus preset search on open */
+    requestAnimationFrame(function () { searchInput.focus(); });
   }
 
   return {

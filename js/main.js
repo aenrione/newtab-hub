@@ -178,6 +178,19 @@
     return profile.widgets || [];
   }
 
+  /* ── Live widget config update (outside edit mode) ── */
+
+  Hub.updateWidgetConfig = async function (widgetId, patch) {
+    var widgets = resolvedWidgets().map(function (w) {
+      return Object.assign({}, w, { config: JSON.parse(JSON.stringify(w.config || {})) });
+    });
+    var w = widgets.find(function (ww) { return ww.id === widgetId; });
+    if (!w) return;
+    Object.assign(w.config, patch);
+    state.profileOverrides[state.activeProfile] = { widgets: widgets };
+    await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
+  };
+
   /* ── Render pipeline ── */
 
   var widgetElements = {};
@@ -405,6 +418,18 @@
       dropdown.classList.toggle("is-open");
     });
 
+    /* Expose profile cycling for keyboard shortcut */
+    Hub.cycleProfile = async function (direction) {
+      var profiles = state.bundle ? state.bundle.profiles : {};
+      var names = Object.keys(profiles);
+      if (names.length <= 1) return;
+      var idx = names.indexOf(state.activeProfile);
+      var next = (idx + (direction || 1) + names.length) % names.length;
+      if (Hub.grid.isEditing() && editExitFn) { editExitFn(); editExitFn = null; }
+      await state.store.set(Hub.STORAGE_KEY, names[next]);
+      await renderDashboard(names[next]);
+    };
+
     document.addEventListener("click", function (e) {
       if (!dropdown.contains(e.target) && e.target !== btn) {
         dropdown.classList.remove("is-open");
@@ -489,20 +514,34 @@
       });
     }
 
-    btn.addEventListener("click", function () {
+    function enterEdit() {
       var gridEl = document.getElementById("dashboard-grid");
+      if (Hub.grid.isEditing()) return;
+      var current = state.profileOverrides[state.activeProfile];
+      savedOverrides = current ? JSON.parse(JSON.stringify(current)) : undefined;
+      var widgets = resolvedWidgets();
+      Hub.grid.setEditClone(widgets);
+      editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave);
+    }
+
+    btn.addEventListener("click", function () {
       if (Hub.grid.isEditing()) {
         saveLayout();
       } else {
-        /* Snapshot current overrides for cancel */
-        var current = state.profileOverrides[state.activeProfile];
-        savedOverrides = current ? JSON.parse(JSON.stringify(current)) : undefined;
-        /* Create working clone */
-        var widgets = resolvedWidgets();
-        Hub.grid.setEditClone(widgets);
-        editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave);
+        enterEdit();
       }
     });
+
+    /* Expose edit mode API for keyboard shortcuts */
+    Hub.editMode = {
+      enter: enterEdit,
+      save: saveLayout,
+      cancel: cancelLayout,
+      addWidget: function () {
+        var gridEl = document.getElementById("dashboard-grid");
+        Hub.grid.openAddWidgetModal(gridEl, onWidgetAdded);
+      }
+    };
   }
 
   /* ── Init ── */
@@ -555,6 +594,10 @@
     document.getElementById("theme-button").addEventListener("click", function () {
       Hub.customize.openThemeSidebar(state.store, state.activeProfile);
     });
+
+    Hub.openTheme = function () {
+      Hub.customize.openThemeSidebar(state.store, state.activeProfile);
+    };
 
     document.getElementById("help-button").addEventListener("click", function () { Hub.help.show(); });
 

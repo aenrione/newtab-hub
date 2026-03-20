@@ -9,13 +9,49 @@ Hub.registry.register("todo", {
     var title = config.title || "Todo";
     container.innerHTML =
       '<div class="widget-header">' +
-        '<h2>' + Hub.escapeHtml(title) + '</h2>' +
+        '<h2 class="todo-title" title="Double-click to rename">' + Hub.escapeHtml(title) + '</h2>' +
         '<button class="todo-clear-btn toolbar-button toolbar-button-ghost" type="button" title="Clear completed">Clear done</button>' +
       '</div>' +
       '<div class="todo-input-row">' +
         '<input type="text" class="todo-input" placeholder="Add a todo\u2026" data-focusable="true" />' +
       '</div>' +
       '<div class="todo-list"><div class="empty-state">Loading\u2026</div></div>';
+
+    /* Inline rename on double-click */
+    function attachRename(h2El) {
+      h2El.addEventListener("dblclick", function startRename() {
+        if (Hub.grid.isEditing()) return;
+        var inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "todo-title-edit";
+        inp.value = config.title || "Todo";
+        h2El.replaceWith(inp);
+        inp.focus();
+        inp.select();
+
+        var committed = false;
+        function commit() {
+          if (committed) return;
+          committed = true;
+          var newTitle = inp.value.trim() || "Todo";
+          config.title = newTitle;
+          var newH2 = document.createElement("h2");
+          newH2.className = "todo-title";
+          newH2.title = "Double-click to rename";
+          newH2.textContent = newTitle;
+          inp.replaceWith(newH2);
+          attachRename(newH2);
+          Hub.updateWidgetConfig(widgetId, { title: newTitle });
+        }
+
+        inp.addEventListener("blur", commit);
+        inp.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+          if (e.key === "Escape") { e.preventDefault(); inp.value = config.title || "Todo"; inp.blur(); }
+        });
+      });
+    }
+    attachRename(container.querySelector(".todo-title"));
   },
 
   load: async function (container, config, state, token) {

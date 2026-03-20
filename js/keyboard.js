@@ -71,9 +71,9 @@ Hub.keyboard = (function () {
   /* ── Widget chord shortcuts (e.g. "t2" to open item 2 in group T) ── */
 
   /* Ergonomic priority: home row center outward, top row, bottom row.
-     Excludes keys already bound: h j k l d u z */
+     Excludes keys already bound: h j k l d u z e p t */
   var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
-  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1 };
+  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1 };
 
   var chordState = { active: false, container: null, key: null, timer: null };
   var widgetKeyMap = {}; /* letter → { widgetEl, container, title } */
@@ -90,9 +90,11 @@ Hub.keyboard = (function () {
     return h ? h.textContent.trim() : "";
   }
 
-  function getContainerFocusables(container) {
+  function getContainerFocusables(container, includeInputs) {
     return Array.from(container.querySelectorAll('[data-focusable="true"]')).filter(function (n) {
-      return n.offsetParent !== null && n.tagName !== "INPUT" && n.tagName !== "TEXTAREA";
+      if (n.offsetParent === null) return false;
+      if (!includeInputs && (n.tagName === "INPUT" || n.tagName === "TEXTAREA")) return false;
+      return true;
     });
   }
 
@@ -166,6 +168,10 @@ Hub.keyboard = (function () {
     });
   }
 
+  function isTodoWidget(entry) {
+    return entry.widgetEl && entry.widgetEl.dataset.widgetType === "todo";
+  }
+
   function enterChord(key) {
     var entry = widgetKeyMap[key];
     if (!entry) return false;
@@ -174,6 +180,7 @@ Hub.keyboard = (function () {
     chordState.active = true;
     chordState.key = key;
     chordState.container = entry.container;
+    chordState.isTodo = isTodoWidget(entry);
 
     entry.container.classList.add("chord-active");
     entry.container.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -183,14 +190,22 @@ Hub.keyboard = (function () {
       entry.container.open = true;
     }
 
-    /* Show numbered indices on focusable items */
-    var items = getContainerFocusables(entry.container);
+    /* Show numbered indices on focusable items (include inputs for todo) */
+    var items = getContainerFocusables(entry.container, chordState.isTodo);
     items.forEach(function (item, i) {
       if (i >= 9) return;
       var idx = document.createElement("span");
       idx.className = "chord-index";
-      idx.textContent = i + 1;
-      item.appendChild(idx);
+      /* For todo widget, input gets "0" badge, items get 1-9 */
+      if (chordState.isTodo && (item.tagName === "INPUT" || item.tagName === "TEXTAREA")) {
+        idx.textContent = "0";
+        idx.classList.add("chord-index-input");
+        item.parentNode.insertBefore(idx, item.nextSibling);
+      } else {
+        idx.textContent = i + 1 - (chordState.isTodo ? 1 : 0);
+        if (idx.textContent === "0") { idx.remove(); return; }
+        item.appendChild(idx);
+      }
     });
 
     chordState.timer = setTimeout(clearChord, 1500);
@@ -202,14 +217,30 @@ Hub.keyboard = (function () {
     var entry = widgetKeyMap[chordState.key];
     if (!entry) { clearChord(); return false; }
 
-    var items = getContainerFocusables(entry.container);
-    var idx = num - 1;
-    if (idx >= 0 && idx < items.length) {
-      var el = items[idx];
-      if (el.href) {
-        Hub.openItem(el.href, metaKey);
-      } else {
-        el.click();
+    var items = getContainerFocusables(entry.container, chordState.isTodo);
+
+    if (chordState.isTodo) {
+      /* 0 focuses the todo input */
+      if (num === 0) {
+        var input = items.find(function (el) { return el.tagName === "INPUT" || el.tagName === "TEXTAREA"; });
+        if (input) input.focus();
+        clearChord();
+        return true;
+      }
+      /* For numbered items, skip the input element */
+      var nonInputs = items.filter(function (el) { return el.tagName !== "INPUT" && el.tagName !== "TEXTAREA"; });
+      var idx = num - 1;
+      if (idx >= 0 && idx < nonInputs.length) {
+        var el = nonInputs[idx];
+        if (el.href) Hub.openItem(el.href, metaKey);
+        else el.click();
+      }
+    } else {
+      var idx = num - 1;
+      if (idx >= 0 && idx < items.length) {
+        var el = items[idx];
+        if (el.href) Hub.openItem(el.href, metaKey);
+        else el.click();
       }
     }
     clearChord();
@@ -227,6 +258,9 @@ Hub.keyboard = (function () {
         if (key === "escape") document.querySelector(".help-dialog[open]").close();
         return;
       }
+      /* Let theme sidebar handle its own keyboard events; only allow T toggle through (when not typing) */
+      var themeSidebarOpen = document.querySelector(".theme-sidebar.is-open");
+      if (themeSidebarOpen && !(key === "t" && !typing)) return;
 
       if ((e.metaKey || e.ctrlKey) && key === "l") return;
       if ((e.metaKey || e.ctrlKey) && key === "k") {
@@ -235,15 +269,70 @@ Hub.keyboard = (function () {
         return;
       }
 
+      /* Ctrl/Cmd+S: save layout in edit mode */
+      if ((e.metaKey || e.ctrlKey) && key === "s") {
+        if (Hub.grid.isEditing()) {
+          e.preventDefault();
+          if (Hub.editMode) Hub.editMode.save();
+          return;
+        }
+      }
+
       if (!typing && key === "/") { e.preventDefault(); Hub.focusSearch(); return; }
 
       if (!typing && key === "?") { e.preventDefault(); Hub.help.show(); return; }
       if (!typing && key === "z") { e.preventDefault(); Hub.zen.toggle(); Hub.zen.updateButtonIcon(); return; }
 
+      /* P / Shift+P: cycle profiles */
+      if (!typing && (key === "p") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (document.querySelector(".modal-overlay") || document.querySelector(".theme-sidebar.is-open")) return;
+        e.preventDefault();
+        if (Hub.cycleProfile) Hub.cycleProfile(e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      /* T: open theme sidebar */
+      if (!typing && key === "t" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (document.querySelector(".modal-overlay") || Hub.grid.isEditing()) return;
+        e.preventDefault();
+        var sidebar = document.querySelector(".theme-sidebar");
+        if (sidebar && sidebar.classList.contains("is-open")) {
+          Hub.customize.closeThemeSidebar();
+        } else {
+          if (Hub.openTheme) Hub.openTheme();
+        }
+        return;
+      }
+
+      /* E: toggle edit mode */
+      if (!typing && key === "e" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (document.querySelector(".modal-overlay")) return;
+        e.preventDefault();
+        if (Hub.grid.isEditing()) {
+          if (Hub.editMode) Hub.editMode.save();
+        } else {
+          if (Hub.editMode) Hub.editMode.enter();
+        }
+        return;
+      }
+
+      /* A: add widget (only in edit mode) */
+      if (!typing && key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && Hub.grid.isEditing()) {
+        if (document.querySelector(".modal-overlay")) return;
+        e.preventDefault();
+        if (Hub.editMode) Hub.editMode.addWidget();
+        return;
+      }
+
+      /* Edit mode keyboard controls: arrow keys move, shift+arrows resize, G config, X/Delete remove */
+      if (!typing && Hub.grid.isEditing() && !document.querySelector(".modal-overlay")) {
+        if (Hub.grid.handleEditKey(e)) return;
+      }
+
       /* Chord mode: number or escape while chord is active */
       if (!typing && chordState.active) {
         if (key === "escape") { e.preventDefault(); clearChord(); return; }
-        if (/^[1-9]$/.test(e.key)) {
+        if (/^[0-9]$/.test(e.key)) {
           e.preventDefault();
           handleChordNumber(Number(e.key), e.metaKey || e.ctrlKey);
           return;
@@ -260,6 +349,9 @@ Hub.keyboard = (function () {
       }
 
       if (typing) return;
+
+      /* Skip chord and spatial nav when in edit mode (handled above) */
+      if (Hub.grid.isEditing()) return;
 
       /* Chord mode: letter press to enter chord (skip if modifier held) */
       if (!e.metaKey && !e.ctrlKey && !e.altKey && widgetKeyMap[key]) {

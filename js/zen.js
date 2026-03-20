@@ -23,7 +23,7 @@ Hub.zen = (function () {
     /* Block during edit mode */
     if (st.editing) return true;
     /* Block when theme sidebar is open */
-    if (document.querySelector(".theme-sidebar")) return true;
+    if (document.querySelector(".theme-sidebar.is-open")) return true;
     /* Block when help dialog is open */
     if (document.querySelector(".help-dialog[open]")) return true;
     /* Block when customize dialog is open */

@@ -23,6 +23,13 @@ Hub.storageApi = function () {
         return new Promise(function (resolve) {
           chrome.storage.local.set({ [key]: value }, resolve);
         });
+      },
+      async getAll() {
+        return new Promise(function (resolve) {
+          chrome.storage.local.get(null, function (result) {
+            resolve(result || {});
+          });
+        });
       }
     };
   }
@@ -36,6 +43,16 @@ Hub.storageApi = function () {
     },
     async set(key, value) {
       localStorage.setItem(key, JSON.stringify(value));
+    },
+    async getAll() {
+      var result = {};
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (!key.startsWith("new-tab-")) continue;
+        try { result[key] = JSON.parse(localStorage.getItem(key)); }
+        catch (_) { result[key] = localStorage.getItem(key); }
+      }
+      return result;
     }
   };
 };
