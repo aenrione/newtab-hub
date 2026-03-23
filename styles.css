@@ -1367,6 +1367,86 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .hidden, .is-hidden { display: none !important; }
 .empty-state { color: var(--muted); font-size: 0.76rem; padding: 4px 0; }
 
+/* ── Sync status badge (bottom-right) ── */
+.sync-badge {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.72rem;
+  color: var(--muted);
+  z-index: 100;
+  pointer-events: none;
+  user-select: none;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.sync-badge.is-error {
+  color: var(--down);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+.sync-badge-icon { display: flex; align-items: center; }
+
+@keyframes sync-spin {
+  to { transform: rotate(360deg); }
+}
+.sync-spin {
+  animation: sync-spin 1s linear infinite;
+}
+
+/* ── Sync toast container (bottom-left) ── */
+.sync-toast-container {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 200;
+  pointer-events: none;
+}
+.sync-toast {
+  padding: 7px 12px;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.sync-toast.is-confirm {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sync-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.sync-toast-btn {
+  padding: 2px 8px;
+  background: var(--bg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.sync-toast-btn:hover { background: var(--surface-hover); }
+.sync-toast-yes { border-color: rgba(74, 222, 128, 0.4); color: var(--ok); }
+.sync-toast-yes:hover { background: rgba(74, 222, 128, 0.08); }
+
 /* ── Responsive ── */
 @media (max-width: 1280px) {
   .links-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
