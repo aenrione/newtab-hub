@@ -428,14 +428,7 @@
         if (e.key === "Escape") { e.preventDefault(); renderDropdown(); }
       });
 
-      var okBtn = document.createElement("button");
-      okBtn.type = "button";
-      okBtn.textContent = "Add";
-      okBtn.className = "profile-dropdown-add-btn";
-      okBtn.addEventListener("click", createProfile);
-
       wrapper.appendChild(input);
-      wrapper.appendChild(okBtn);
       setTimeout(function () { input.focus(); }, 0);
       return wrapper;
     }
@@ -443,7 +436,11 @@
     function renderDropdown() {
       dropdown.replaceChildren();
       var profiles = state.bundle ? state.bundle.profiles : {};
+      var defaultProfile = state.bundle ? state.bundle.defaultProfile : null;
       Object.keys(profiles).forEach(function (name) {
+        var row = document.createElement("div");
+        row.className = "profile-dropdown-row";
+
         var item = document.createElement("button");
         item.className = "profile-dropdown-item" + (name === state.activeProfile ? " is-active" : "");
         item.type = "button";
@@ -455,7 +452,32 @@
           await state.store.set(Hub.STORAGE_KEY, name);
           await renderDashboard(name);
         });
-        dropdown.appendChild(item);
+        row.appendChild(item);
+
+        if (name !== defaultProfile) {
+          var delBtn = document.createElement("button");
+          delBtn.className = "profile-dropdown-delete";
+          delBtn.type = "button";
+          delBtn.title = "Remove profile";
+          delBtn.textContent = "×";
+          delBtn.addEventListener("click", async function (e) {
+            e.stopPropagation();
+            var stored = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
+            delete stored[name];
+            await state.store.set(Hub.STORAGE_PROFILES_KEY, stored);
+            state.bundle = await loadBundle();
+            if (state.activeProfile === name) {
+              await state.store.set(Hub.STORAGE_KEY, state.bundle.defaultProfile);
+              dropdown.classList.remove("is-open");
+              await renderDashboard(state.bundle.defaultProfile);
+            } else {
+              renderDropdown();
+            }
+          });
+          row.appendChild(delBtn);
+        }
+
+        dropdown.appendChild(row);
       });
 
       /* New profile entry */
