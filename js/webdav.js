@@ -26,17 +26,48 @@ self.webdav = (function () {
     }
   }
 
-  async function upload(url, username, password, payload) {
+  function parentUrl(url) {
+    return url.replace(/\/[^/]+$/, "");
+  }
+
+  async function mkcol(url, username, password) {
     try {
       var resp = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Authorization": authHeader(username, password),
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        method: "MKCOL",
+        headers: { "Authorization": authHeader(username, password) }
       });
+      /* 201 = created, 405 = already exists — both mean the directory is usable */
+      return resp.status === 201 || resp.status === 405;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function putOnce(url, username, password, body) {
+    return fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": authHeader(username, password),
+        "Content-Type": "application/json"
+      },
+      body: body
+    });
+  }
+
+  async function upload(url, username, password, payload) {
+    try {
+      var body = JSON.stringify(payload);
+      var resp = await putOnce(url, username, password, body);
       if (resp.status === 401) return normalize(false, 401, "Invalid credentials");
+
+      /* 404 or 409 usually means the parent directory doesn't exist — try MKCOL then retry */
+      if (resp.status === 404 || resp.status === 409) {
+        var ok = await mkcol(parentUrl(url), username, password);
+        if (!ok) return normalize(false, resp.status, "Upload failed: parent directory could not be created (server returned " + resp.status + ")");
+        resp = await putOnce(url, username, password, body);
+        if (resp.status === 401) return normalize(false, 401, "Invalid credentials");
+      }
+
       if (!resp.ok) return normalize(false, resp.status, "Upload failed: server returned " + resp.status);
       return normalize(true, resp.status, "Uploaded");
     } catch (err) {
