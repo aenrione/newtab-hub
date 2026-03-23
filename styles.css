@@ -90,6 +90,35 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   transition: opacity 600ms ease;
 }
 
+/* ── Profile label (topbar left) ── */
+.profile-label {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(139, 211, 221, 0.07);
+  border: 1px solid rgba(139, 211, 221, 0.22);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.profile-label::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.7;
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+.profile-label:empty { display: none; }
+
 /* ── Topbar ── */
 .topbar {
   display: flex;

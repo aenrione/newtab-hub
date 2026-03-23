@@ -264,6 +264,10 @@
     /* Sync render */
     renderAllWidgets();
 
+    /* Update profile label in topbar */
+    var profileLabelEl = document.getElementById("profile-label");
+    if (profileLabelEl) profileLabelEl.textContent = profile.label || profileName;
+
     /* Focus search immediately after DOM is ready — don't wait for async loads */
     Hub.focusSearch();
 
@@ -319,6 +323,7 @@
     var input = document.getElementById("quick-search");
     if (!input) return;
     if (window.__flushEarlyKeys) { window.__flushEarlyKeys(); delete window.__flushEarlyKeys; return; }
+    if (state.autoFocusPausedUntil > Date.now()) return;
     /* Don't disrupt the user if they're already typing */
     if (document.activeElement === input) return;
     input.focus();
@@ -426,6 +431,8 @@
       var idx = names.indexOf(state.activeProfile);
       var next = (idx + (direction || 1) + names.length) % names.length;
       if (Hub.grid.isEditing() && editExitFn) { editExitFn(); editExitFn = null; }
+      /* Suppress autofocus — user is navigating via keyboard, not starting a search */
+      state.autoFocusPausedUntil = Date.now() + 2000;
       await state.store.set(Hub.STORAGE_KEY, names[next]);
       await renderDashboard(names[next]);
     };
