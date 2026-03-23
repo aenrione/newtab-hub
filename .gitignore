@@ -16,6 +16,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Git worktrees
+.worktrees/
+
 # Dependencies (future-proofing)
 node_modules/
 
