@@ -480,13 +480,22 @@
     }
 
     async function doDeleteProfile(id, uploadAfter) {
-      var stored = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
-      delete stored[id];
-      await state.store.set(Hub.STORAGE_PROFILES_KEY, stored);
-      state.bundle = await loadBundle();
-      if (uploadAfter && typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "syncUpload" });
+      if (uploadAfter) {
+        /* "Delete everywhere": write locally, then push to remote */
+        var stored = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
+        delete stored[id];
+        await state.store.set(Hub.STORAGE_PROFILES_KEY, stored);
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+          chrome.runtime.sendMessage({ action: "syncUpload" });
+        }
+      } else {
+        /* "Delete here": delegate to background, which suppresses auto-upload.
+           Await the response so we know the write is done before reloading. */
+        await new Promise(function (resolve) {
+          chrome.runtime.sendMessage({ action: "deleteProfileLocal", id: id }, resolve);
+        });
       }
+      state.bundle = await loadBundle();
       if (state.activeProfile === id) {
         await state.store.set(Hub.STORAGE_KEY, state.bundle.defaultProfile);
         dropdown.classList.remove("is-open");
