@@ -1287,7 +1287,9 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   max-width: 480px;
   width: 90vw;
   max-height: 80vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 16px 48px rgba(0,0,0,0.4);
   z-index: 301;
 }
@@ -1352,8 +1354,8 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .add-widget-card svg { flex-shrink: 0; color: var(--muted-strong); }
 
 /* ── Widget config modal ── */
-.config-modal-body { margin-bottom: 12px; }
-.config-modal-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.config-modal-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 4px; }
+.config-modal-actions { display: flex; justify-content: flex-end; gap: 6px; padding-top: 12px; flex-shrink: 0; }
 
 /* ── Edit bar add widget button ── */
 .edit-bar-add-btn {
