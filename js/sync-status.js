@@ -16,6 +16,7 @@ Hub.syncStatus = (function () {
   var badge = null;
   var toastContainer = null;
   var pendingToast = null; /* "pull" | "push" | null */
+  var currentData = {};
 
   /* ── Relative time helper ── */
 
@@ -47,16 +48,22 @@ Hub.syncStatus = (function () {
 
     badge.classList.remove("hidden");
 
+    var iconEl  = badge.querySelector(".sync-badge-icon");
+    var labelEl = badge.querySelector(".sync-badge-label");
+
     if (status === "syncing") {
-      badge.innerHTML = SPIN_SVG;
+      iconEl.innerHTML = SPIN_SVG;
+      labelEl.textContent = "";
       badge.title = "Syncing\u2026";
     } else if (status === "error") {
-      badge.innerHTML = ALERT_SVG + ' <span class="sync-badge-label">Sync error</span>';
+      iconEl.innerHTML = ALERT_SVG;
+      labelEl.textContent = "Sync error";
       badge.title = error || "Unknown error";
     } else {
       /* idle (default) */
       var rel = relativeTime(last);
-      badge.innerHTML = CLOUD_SVG + ' <span class="sync-badge-label">' + Hub.escapeHtml(rel) + '</span>';
+      iconEl.innerHTML = CLOUD_SVG;
+      labelEl.textContent = rel;
       if (last) {
         badge.title = "Last synced: " + new Date(last).toLocaleString();
       } else {
@@ -137,34 +144,33 @@ Hub.syncStatus = (function () {
 
   /* ── Storage change listener ── */
 
+  var WATCH_KEYS = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-webdav-url"];
+
   function onStorageChanged(changes, area) {
     if (area !== "local") return;
+    if (!WATCH_KEYS.some(function (k) { return changes[k]; })) return;
 
-    var relevant = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-webdav-url"];
-    var hasRelevant = relevant.some(function (k) { return k in changes; });
-    if (!hasRelevant) return;
+    WATCH_KEYS.forEach(function (k) {
+      if (changes[k]) currentData[k] = changes[k].newValue;
+    });
+    renderBadge(currentData);
 
-    storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"])
-      .then(function (storage) {
-        renderBadge(storage);
+    /* Toast feedback for keyboard-triggered syncs */
+    if (!pendingToast) return;
 
-        /* Toast feedback for keyboard-triggered syncs */
-        if (!pendingToast) return;
+    var status = currentData["new-tab-sync-status"] || "idle";
+    var errMsg = currentData["new-tab-sync-error"] || "Unknown error";
 
-        var status = storage["new-tab-sync-status"] || "idle";
-        var errMsg = storage["new-tab-sync-error"] || "Unknown error";
-
-        /* Only fire toast when sync has settled (idle or error) */
-        if (status === "idle") {
-          var kind = pendingToast;
-          pendingToast = null;
-          showToast(kind === "pull" ? "Pulled" : "Pushed");
-        } else if (status === "error") {
-          var kind = pendingToast;
-          pendingToast = null;
-          showToast(kind === "pull" ? "Pull failed: " + errMsg : "Push failed: " + errMsg);
-        }
-      });
+    /* Only fire toast when sync has settled (idle or error) */
+    if (status === "idle") {
+      var kind = pendingToast;
+      pendingToast = null;
+      showToast(kind === "pull" ? "Pulled" : "Pushed");
+    } else if (status === "error") {
+      var kind = pendingToast;
+      pendingToast = null;
+      showToast(kind === "pull" ? "Pull failed: " + errMsg : "Push failed: " + errMsg);
+    }
   }
 
   /* ── Public API ── */
@@ -173,6 +179,7 @@ Hub.syncStatus = (function () {
     /* Create badge */
     badge = document.createElement("div");
     badge.className = "sync-badge hidden";
+    badge.innerHTML = '<span class="sync-badge-icon"></span><span class="sync-badge-label"></span>';
     document.body.appendChild(badge);
 
     /* Create toast container */
@@ -183,15 +190,13 @@ Hub.syncStatus = (function () {
     /* Read initial storage and render */
     storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"])
       .then(function (storage) {
-        renderBadge(storage);
+        currentData = storage;
+        renderBadge(currentData);
       });
 
     /* Refresh relative timestamp every 30 seconds */
     setInterval(function () {
-      storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"])
-        .then(function (storage) {
-          renderBadge(storage);
-        });
+      renderBadge(currentData);
     }, 30000);
 
     /* Listen for storage changes */
@@ -199,26 +204,18 @@ Hub.syncStatus = (function () {
   }
 
   function pull() {
-    storageGet(["new-tab-webdav-url", "new-tab-sync-status"]).then(function (storage) {
-      var url    = storage["new-tab-webdav-url"];
-      var status = storage["new-tab-sync-status"];
-      if (!url) return;
-      if (status === "syncing") return;
-      pendingToast = "pull";
-      chrome.runtime.sendMessage({ action: "syncDownload" });
-    });
+    if (!currentData["new-tab-webdav-url"]) return;
+    if (currentData["new-tab-sync-status"] === "syncing") return;
+    pendingToast = "pull";
+    chrome.runtime.sendMessage({ action: "syncDownload" });
   }
 
   function confirmPush() {
-    storageGet(["new-tab-webdav-url", "new-tab-sync-status"]).then(function (storage) {
-      var url    = storage["new-tab-webdav-url"];
-      var status = storage["new-tab-sync-status"];
-      if (!url) return;
-      if (status === "syncing") return;
-      showConfirmToast(function () {
-        pendingToast = "push";
-        chrome.runtime.sendMessage({ action: "syncUpload" });
-      });
+    if (!currentData["new-tab-webdav-url"]) return;
+    if (currentData["new-tab-sync-status"] === "syncing") return;
+    showConfirmToast(function () {
+      pendingToast = "push";
+      chrome.runtime.sendMessage({ action: "syncUpload" });
     });
   }
 
