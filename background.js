@@ -169,6 +169,13 @@ async function doDownload() {
     toWrite[k] = downloaded.data[k];
   });
 
+  /* Merge profiles: remote wins for overlapping IDs, local-only profiles are preserved.
+     Sync is additive — profiles are never deleted by a download. */
+  if (toWrite["new-tab-profiles"]) {
+    var localProfiles = await storageGet("new-tab-profiles") || {};
+    toWrite["new-tab-profiles"] = Object.assign({}, localProfiles, toWrite["new-tab-profiles"]);
+  }
+
   if (Object.keys(toWrite).length === 0) {
     await storageSet({ "new-tab-sync-status": "error", "new-tab-sync-error": "Downloaded data was empty after filtering" });
     return;
