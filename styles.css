@@ -846,6 +846,31 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .editor-card-over { box-shadow: 0 -2px 0 0 var(--accent); }
 .editor-hint { color: var(--muted); font-size: 0.78rem; margin: 4px 0; }
 
+/* ── Editor keyboard navigation ── */
+.editor-card[data-nav-item].editor-nav-focused {
+  outline: 2px solid rgba(121, 174, 232, 0.5);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+.editor-nav-hints {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 2px;
+}
+
+.editor-nav-hint {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  font-family: monospace;
+  color: var(--muted-strong);
+  user-select: none;
+}
+
 /* ── Theme editor ── */
 .theme-grid {
   display: grid;
@@ -1217,6 +1242,13 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   box-shadow: 0 0 0 4px rgba(121, 174, 232, 0.15);
   z-index: 10 !important;
 }
+.widget-grabbed {
+  outline: 2px solid var(--warn, #fbbf24) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.2);
+  z-index: 10 !important;
+}
+.widget-grabbed .widget-edit-btn.is-drag { color: var(--warn, #fbbf24); }
 .edit-chord-badge {
   display: inline-flex;
   align-items: center;
