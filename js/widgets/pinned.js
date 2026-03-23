@@ -56,8 +56,9 @@ function emptyNode(text) {
   return d;
 }
 
-function buildListEditor(container, config, listKey, onChange, fields, emptyItem) {
+function buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions) {
   container.replaceChildren();
+  if (navOptions && navOptions.onRebuild) navOptions.onRebuild();  // notify on every rebuild
   var items = config[listKey] || [];
   var dragSrcIndex = null;
 
@@ -65,10 +66,11 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   addBtn.className = "toolbar-button toolbar-button-ghost";
   addBtn.type = "button";
   addBtn.textContent = "Add";
+  addBtn.dataset.navAdd = "";                              // ← NEW
   addBtn.addEventListener("click", function () {
     config[listKey].push(emptyItem());
     onChange(config);
-    buildListEditor(container, config, listKey, onChange, fields, emptyItem);
+    buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions);
   });
   container.appendChild(addBtn);
 
@@ -79,11 +81,22 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
   var listWrap = document.createElement("div");
   listWrap.className = "editor-items";
+  listWrap.dataset.navList = "";                           // ← NEW
   container.appendChild(listWrap);
+
+  listWrap.addEventListener("navreorder", function (e) {
+    var from = e.detail.fromIndex;
+    var to = e.detail.toIndex;
+    var moved = config[listKey].splice(from, 1)[0];
+    config[listKey].splice(to, 0, moved);
+    onChange(config);
+    buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions);
+  });
 
   items.forEach(function (item, index) {
     var card = document.createElement("div");
     card.className = "editor-card";
+    card.dataset.navItem = "";                                 // ← NEW
     card.draggable = true;
     card.dataset.index = index;
 
@@ -141,16 +154,17 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
       var moved = config[listKey].splice(dragSrcIndex, 1)[0];
       config[listKey].splice(index, 0, moved);
       onChange(config);
-      buildListEditor(container, config, listKey, onChange, fields, emptyItem);
+      buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions);
     });
 
     card.querySelector(".editor-remove").addEventListener("click", function () {
       config[listKey].splice(index, 1);
       onChange(config);
-      buildListEditor(container, config, listKey, onChange, fields, emptyItem);
+      buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions);
     });
 
     card.querySelectorAll("[data-field]").forEach(function (inp) {
+      inp.dataset.navField = "";                               // ← NEW
       inp.addEventListener("input", function (e) {
         item[e.target.dataset.field] = e.target.value;
         onChange(config);
