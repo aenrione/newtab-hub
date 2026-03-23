@@ -847,6 +847,10 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .editor-hint { color: var(--muted); font-size: 0.78rem; margin: 4px 0; }
 
 /* ── Editor keyboard navigation ── */
+.editor-card[data-nav-item]:focus {
+  outline: none;
+}
+
 .editor-card[data-nav-item].editor-nav-focused {
   outline: 2px solid rgba(121, 174, 232, 0.5);
   outline-offset: 2px;
