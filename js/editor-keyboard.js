@@ -297,6 +297,7 @@ EditorKeyboard.prototype._handleItemTab = function (e) {
 };
 
 EditorKeyboard.prototype._handleFlatTab = function (e) {
+  if (e.key !== "Tab") return;
   var panel = this.panel;
   var focusable = Array.from(panel.querySelectorAll(
     "[data-nav-header-field], [data-nav-field], button[data-nav-save], button[data-nav-add]"
