@@ -46,11 +46,12 @@ EditorKeyboard.prototype.rescan = function () {
         }
       }
     } else {
-      // Empty list: highlight header if present, otherwise nothing to focus
+      // Empty list: highlight header if present, show add hint
       this.activeItemIndex = -1;
       if (this.headerFields.length > 0) {
         this._highlightHeader(0);
       }
+      this._renderEmptyHints();
     }
   } else {
     this.mode = "flat";
@@ -111,6 +112,21 @@ EditorKeyboard.prototype._renderHints = function (item, mode) {
 
 EditorKeyboard.prototype._clearHints = function () {
   this.panel.querySelectorAll(".editor-nav-hints").forEach(function (el) { el.remove(); });
+};
+
+EditorKeyboard.prototype._renderEmptyHints = function () {
+  this._clearHints();
+  var listWrap = this.panel.querySelector("[data-nav-list]");
+  if (!listWrap) return;
+  var hintsEl = document.createElement("div");
+  hintsEl.className = "editor-nav-hints";
+  ["a/n add", "Esc close"].forEach(function (text) {
+    var span = document.createElement("span");
+    span.className = "editor-nav-hint";
+    span.textContent = text;
+    hintsEl.appendChild(span);
+  });
+  listWrap.appendChild(hintsEl);
 };
 
 EditorKeyboard.prototype._getSaveBtn = function () {
@@ -196,6 +212,13 @@ EditorKeyboard.prototype._onKey = function (e) {
       if (e.key === "Escape") {
         e.preventDefault();
         this._closeModal();
+        return;
+      }
+      if ((e.key === "n" || e.key === "a") && !this._isTyping()) {
+        e.preventDefault();
+        this.activeItemIndex = this.items.length;
+        var addBtn = this._getAddBtn();
+        if (addBtn) addBtn.click();
         return;
       }
       return; // block all other keys while header is highlighted

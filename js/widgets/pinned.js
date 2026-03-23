@@ -73,16 +73,16 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   });
   container.appendChild(addBtn);
 
-  if (!items.length) {
-    container.appendChild(emptyNode("None yet."));
-    if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
-    return;
-  }
-
   var listWrap = document.createElement("div");
   listWrap.className = "editor-items";
   listWrap.dataset.navList = "";                           // ← NEW
   container.appendChild(listWrap);
+
+  if (!items.length) {
+    listWrap.appendChild(emptyNode("None yet."));
+    if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
+    return;
+  }
 
   listWrap.addEventListener("navreorder", function (e) {
     var from = e.detail.fromIndex;
