@@ -612,7 +612,13 @@
 
     state.collapsedGroups = (await state.store.get(Hub.STORAGE_COLLAPSED_KEY)) || {};
     var saved = await state.store.get(Hub.STORAGE_KEY);
-    var activeProfile = state.bundle.profiles[saved] ? saved : state.bundle.defaultProfile;
+    var activeProfile;
+    if (state.bundle.profiles[saved]) {
+      activeProfile = saved;
+    } else {
+      activeProfile = state.bundle.defaultProfile;
+      await state.store.set(Hub.STORAGE_KEY, activeProfile);
+    }
 
     /* Re-apply with profile-specific theme */
     if (savedTheme) {
