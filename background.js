@@ -334,6 +334,7 @@ chrome.runtime.onInstalled.addListener(async function (details) {
   if (existing) return; /* Already seeded (shouldn't happen on fresh install, but be safe) */
   await storageSet({
     "new-tab-profiles": {
+      /* Keep in sync with PERSONAL_SEED in js/main.js */
       personal: {
         label: "Personal",
         widgets: [

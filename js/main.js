@@ -403,9 +403,8 @@
       input.type = "text";
       input.placeholder = "Profile name";
       input.className = "profile-dropdown-input";
-      input.setAttribute("autofocus", "");
 
-      async function confirm() {
+      async function createProfile() {
         var name = input.value.trim();
         if (!name) { renderDropdown(); return; }
         var profiles = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
@@ -425,7 +424,7 @@
       }
 
       input.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { e.preventDefault(); confirm(); }
+        if (e.key === "Enter") { e.preventDefault(); createProfile(); }
         if (e.key === "Escape") { e.preventDefault(); renderDropdown(); }
       });
 
@@ -433,7 +432,7 @@
       okBtn.type = "button";
       okBtn.textContent = "Add";
       okBtn.className = "profile-dropdown-add-btn";
-      okBtn.addEventListener("click", confirm);
+      okBtn.addEventListener("click", createProfile);
 
       wrapper.appendChild(input);
       wrapper.appendChild(okBtn);
