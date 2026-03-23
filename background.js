@@ -181,18 +181,18 @@ async function doDownload() {
   if (result.etag) toWrite[SYNC_ETAG_KEY] = result.etag;
 
   /* Guard against re-upload: the storage write below will fire onChanged for
-     every dashboard key we just restored. Set isDownloading so the listener
+     every dashboard key we just restored. Set isSuppressingUpload so the listener
      ignores those changes — there is nothing new to push back up. */
-  isDownloading = true;
+  isSuppressingUpload = true;
   await storageSet(toWrite);
   /* Reset after a tick to ensure onChanged has fired before we clear the guard. */
-  setTimeout(function () { isDownloading = false; }, 0);
+  setTimeout(function () { isSuppressingUpload = false; }, 0);
 }
 
 /* ── Debounce ── */
 
 var debounceTimer = null;
-var isDownloading = false; /* True while doDownload is writing to storage — prevents download from triggering a re-upload */
+var isSuppressingUpload = false; /* True while writing downloaded data or a local-only profile delete — prevents onChanged from triggering a re-upload */
 
 async function scheduleUpload() {
   var authFailed = await storageGet("new-tab-sync-auth-failed");
@@ -247,7 +247,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
   }
 
   /* Check if any non-excluded dashboard key changed */
-  if (isDownloading) return;
+  if (isSuppressingUpload) return;
   var relevant = Object.keys(changes).some(function (k) {
     return k.startsWith("new-tab-") && !SYNC_TRIGGER_SKIP[k] && !k.startsWith("new-tab-sync-");
   });
