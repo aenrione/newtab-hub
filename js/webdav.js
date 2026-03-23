@@ -4,7 +4,7 @@
 self.webdav = (function () {
 
   function authHeader(username, password) {
-    return "Basic " + btoa(username + ":" + password);
+    return "Basic " + btoa(unescape(encodeURIComponent(username + ":" + password)));
   }
 
   function normalize(ok, status, message, data) {
