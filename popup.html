@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NewTab Hub Sync</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      width: 280px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      padding: 16px;
+    }
+    h2 { font-size: 14px; margin-bottom: 12px; color: #fff; }
+    label { display: block; font-size: 11px; color: #999; margin-bottom: 3px; }
+    input[type="text"],
+    input[type="password"],
+    input[type="url"] {
+      width: 100%;
+      padding: 6px 8px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 12px;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    input:focus { border-color: #666; }
+    button {
+      display: block;
+      width: 100%;
+      padding: 7px;
+      margin-bottom: 6px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #2a2a2a;
+      color: #e0e0e0;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: #333; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.primary { background: #3a5a8a; border-color: #5a7aaa; color: #fff; }
+    button.primary:hover { background: #4a6a9a; }
+    .status-line {
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 10px;
+      min-height: 16px;
+      word-break: break-all;
+    }
+    .status-line.ok { color: #6a9; }
+    .status-line.error { color: #c77; }
+    .status-line.syncing { color: #9af; }
+    a.edit-link {
+      display: block;
+      font-size: 11px;
+      color: #6af;
+      text-align: center;
+      cursor: pointer;
+      margin-top: 4px;
+      text-decoration: none;
+    }
+    a.edit-link:hover { text-decoration: underline; }
+    #msg {
+      font-size: 11px;
+      min-height: 14px;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    #msg.ok { color: #6a9; }
+    #msg.error { color: #c77; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <h2>WebDAV Sync</h2>
+
+  <!-- Config view -->
+  <div id="view-config">
+    <label for="inp-url">Server URL (full path to config file)</label>
+    <input id="inp-url" type="url"
+      placeholder="https://cloud.example.com/remote.php/dav/files/user/newtab.json">
+    <label for="inp-user">Username</label>
+    <input id="inp-user" type="text" autocomplete="username">
+    <label for="inp-pass">Password</label>
+    <input id="inp-pass" type="password" autocomplete="current-password">
+    <div id="msg"></div>
+    <button id="btn-test">Test Connection</button>
+    <button id="btn-save" class="primary">Save</button>
+  </div>
+
+  <!-- Status view -->
+  <div id="view-status" class="hidden">
+    <div id="status-line" class="status-line"></div>
+    <button id="btn-upload" class="primary">Upload Now</button>
+    <button id="btn-download">Download Now</button>
+    <a class="edit-link" id="btn-edit">Edit connection</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
