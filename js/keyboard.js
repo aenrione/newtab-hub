@@ -73,7 +73,7 @@ Hub.keyboard = (function () {
   /* Ergonomic priority: home row center outward, top row, bottom row.
      Excludes keys already bound: h j k l d u z e p t */
   var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
-  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1 };
+  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1, a:1 };
 
   var chordState = { active: false, container: null, key: null, timer: null };
   var widgetKeyMap = {}; /* letter → { widgetEl, container, title } */
@@ -377,6 +377,9 @@ Hub.keyboard = (function () {
     navigate: navigate,
     getFocusIndex: function () { return focusIndex; },
     assignWidgetKeys: assignWidgetKeys,
-    clearChord: clearChord
+    clearChord: clearChord,
+    getWidgetKeyMap: function () { return widgetKeyMap; },
+    ERGO_KEYS: ERGO_KEYS,
+    RESERVED: RESERVED
   };
 })();

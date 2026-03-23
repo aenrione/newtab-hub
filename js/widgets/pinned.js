@@ -59,6 +59,7 @@ function emptyNode(text) {
 function buildListEditor(container, config, listKey, onChange, fields, emptyItem) {
   container.replaceChildren();
   var items = config[listKey] || [];
+  var dragSrcIndex = null;
 
   var addBtn = document.createElement("button");
   addBtn.className = "toolbar-button toolbar-button-ghost";
@@ -76,22 +77,72 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
     return;
   }
 
+  var listWrap = document.createElement("div");
+  listWrap.className = "editor-items";
+  container.appendChild(listWrap);
+
   items.forEach(function (item, index) {
     var card = document.createElement("div");
     card.className = "editor-card";
     card.draggable = true;
+    card.dataset.index = index;
 
-    var inputs = fields.map(function (f) {
+    // Split fields into two rows: first two fields (title+url) and rest (badge+health)
+    var row1Fields = fields.slice(0, 2);
+    var row2Fields = fields.slice(2);
+
+    var row1Html = row1Fields.map(function (f) {
       var val = f.key === "healthCheck" && item[f.key] === true ? "auto" : (item[f.key] || "");
-      return '<label><span>' + Hub.escapeHtml(f.label) + '</span>' +
+      return '<label class="' + (f.key === "href" ? "editor-field-url" : "") + '">' +
+        '<span>' + Hub.escapeHtml(f.label) + '</span>' +
         '<input data-field="' + f.key + '" type="text" value="' + Hub.escapeHtml(val) + '" ' +
         (f.placeholder ? 'placeholder="' + Hub.escapeHtml(f.placeholder) + '"' : '') + ' /></label>';
     }).join("");
 
+    var row2Html = row2Fields.length ? row2Fields.map(function (f) {
+      var val = f.key === "healthCheck" && item[f.key] === true ? "auto" : (item[f.key] || "");
+      return '<label><span>' + Hub.escapeHtml(f.label) + '</span>' +
+        '<input data-field="' + f.key + '" type="text" value="' + Hub.escapeHtml(val) + '" ' +
+        (f.placeholder ? 'placeholder="' + Hub.escapeHtml(f.placeholder) + '"' : '') + ' /></label>';
+    }).join("") : "";
+
     card.innerHTML =
-      '<div class="editor-card-head"><span class="editor-drag">Drag</span>' +
-      '<button class="editor-remove" type="button">Remove</button></div>' +
-      '<div class="editor-grid">' + inputs + '</div>';
+      '<div class="editor-card-head">' +
+        '<span class="editor-drag" title="Drag to reorder">' + Hub.icons.gripVertical + '</span>' +
+        '<div class="editor-card-spacer"></div>' +
+        '<button class="editor-remove" type="button" title="Remove">' + Hub.icons.trash2 + '</button>' +
+      '</div>' +
+      '<div class="editor-grid editor-grid-2col">' + row1Html + '</div>' +
+      (row2Html ? '<div class="editor-grid editor-grid-meta">' + row2Html + '</div>' : '');
+
+    // Drag-and-drop reordering
+    card.addEventListener("dragstart", function (e) {
+      dragSrcIndex = index;
+      card.classList.add("editor-card-dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", function () {
+      card.classList.remove("editor-card-dragging");
+      listWrap.querySelectorAll(".editor-card").forEach(function (c) {
+        c.classList.remove("editor-card-over");
+      });
+    });
+    card.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      listWrap.querySelectorAll(".editor-card").forEach(function (c) {
+        c.classList.remove("editor-card-over");
+      });
+      if (dragSrcIndex !== index) card.classList.add("editor-card-over");
+    });
+    card.addEventListener("drop", function (e) {
+      e.preventDefault();
+      if (dragSrcIndex === null || dragSrcIndex === index) return;
+      var moved = config[listKey].splice(dragSrcIndex, 1)[0];
+      config[listKey].splice(index, 0, moved);
+      onChange(config);
+      buildListEditor(container, config, listKey, onChange, fields, emptyItem);
+    });
 
     card.querySelector(".editor-remove").addEventListener("click", function () {
       config[listKey].splice(index, 1);
@@ -106,6 +157,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
       });
     });
 
-    container.appendChild(card);
+    listWrap.appendChild(card);
   });
 }
