@@ -330,14 +330,16 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
         /* Clear any pending upload so a queued alarm cannot push this deletion to remote */
         await storageSet({ "new-tab-sync-pending": false });
         if (debounceTimer !== null) { clearTimeout(debounceTimer); debounceTimer = null; }
+        chrome.alarms.clear("webdav-sync-pending");
 
         isSuppressingUpload = true;
         var profiles = (await storageGet("new-tab-profiles")) || {};
         delete profiles[msg.id];
         await storageSet({ "new-tab-profiles": profiles });
-        setTimeout(function () { isSuppressingUpload = false; }, 0);
-
-        sendResponse({ received: true });
+        /* Reset flag and respond after a tick — the tick ensures onChanged has fired
+           before we clear isSuppressingUpload, and the response signals main.js that
+           the full operation (including flag reset) is complete. */
+        setTimeout(function () { isSuppressingUpload = false; sendResponse({ received: true }); }, 0);
       } catch (err) {
         console.error(err);
         isSuppressingUpload = false;
