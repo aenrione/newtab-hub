@@ -14,11 +14,23 @@ window.EditorKeyboard = function EditorKeyboard(panel) {
 EditorKeyboard.prototype.attach = function () {
   this.rescan();
   document.addEventListener("keydown", this._handler);
+  this._focusinHandler = this._onFocusin.bind(this);
+  this.panel.addEventListener("focusin", this._focusinHandler);
 };
 
 EditorKeyboard.prototype.detach = function () {
   document.removeEventListener("keydown", this._handler);
+  if (this._focusinHandler) this.panel.removeEventListener("focusin", this._focusinHandler);
   this._clearHints();
+};
+
+EditorKeyboard.prototype._onFocusin = function (e) {
+  // When a header field gains focus (keyboard or mouse), clear any item highlight
+  if (this.headerFields.indexOf(e.target) !== -1) {
+    this.items.forEach(function (el) { el.classList.remove("editor-nav-focused"); });
+    this._clearHints();
+    this.activeItemIndex = -1;
+  }
 };
 
 EditorKeyboard.prototype.rescan = function () {
