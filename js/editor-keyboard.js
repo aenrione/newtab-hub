@@ -26,21 +26,30 @@ EditorKeyboard.prototype.rescan = function () {
   this.headerFields = Array.from(panel.querySelectorAll("[data-nav-header-field]"));
   this.items = Array.from(panel.querySelectorAll("[data-nav-item]"));
 
-  // Determine mode
-  if (this.items.length > 0) {
+  // Use list mode whenever a nav-list container exists (even if empty)
+  var hasList = !!panel.querySelector("[data-nav-list]");
+  if (hasList) {
     this.mode = "list";
-    // Restore focus to clamped index after a rebuild
-    if (this.activeItemIndex >= 0) {
-      this.activeItemIndex = Math.min(this.activeItemIndex, this.items.length - 1);
-      this._focusItem(this.activeItemIndex);
-    } else {
-      // First open: highlight header if present, else focus first item
-      if (this.headerFields.length > 0) {
-        this.activeItemIndex = -1;
-        this._highlightHeader(0);
+    if (this.items.length > 0) {
+      // Restore focus to clamped index after a rebuild
+      if (this.activeItemIndex >= 0) {
+        this.activeItemIndex = Math.min(this.activeItemIndex, this.items.length - 1);
+        this._focusItem(this.activeItemIndex);
       } else {
-        this.activeItemIndex = 0;
-        this._focusItem(0);
+        // First open: highlight header if present, else focus first item
+        if (this.headerFields.length > 0) {
+          this.activeItemIndex = -1;
+          this._highlightHeader(0);
+        } else {
+          this.activeItemIndex = 0;
+          this._focusItem(0);
+        }
+      }
+    } else {
+      // Empty list: highlight header if present, otherwise nothing to focus
+      this.activeItemIndex = -1;
+      if (this.headerFields.length > 0) {
+        this._highlightHeader(0);
       }
     }
   } else {
