@@ -8,6 +8,8 @@ Hub.STORAGE_COLLAPSED_KEY = "new-tab-collapsed-groups";
 Hub.STORAGE_LAYOUT_KEY = "new-tab-grid-layout";
 Hub.STORAGE_THEME_KEY = "new-tab-color-scheme";
 Hub.STORAGE_BG_IMAGE_KEY = "new-tab-bg-image";
+Hub.STORAGE_PROFILES_KEY = "new-tab-profiles";
+Hub.STORAGE_DEFAULT_PROFILE_KEY = "new-tab-default-profile";
 
 Hub.storageApi = function () {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
