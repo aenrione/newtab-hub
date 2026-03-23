@@ -63,6 +63,7 @@ function formatStatus(data) {
   statusLine.textContent = last
     ? "Last synced: " + new Date(last).toLocaleString()
     : "Never synced";
+  setButtons(status === "syncing");
 }
 
 /* ── Views ── */
@@ -214,7 +215,7 @@ btnSave.addEventListener("click", async function () {
     var link = document.createElement("a");
     link.textContent = "Save anyway";
     link.style.cssText = "color:#6af;cursor:pointer;text-decoration:underline;";
-    link.addEventListener("click", function () { forceSave(url, user, pass); });
+    link.addEventListener("click", function () { forceSave(inpUrl.value.trim(), inpUser.value.trim(), inpPass.value); });
     msgEl.appendChild(link);
     return;
   }
