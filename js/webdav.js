@@ -62,6 +62,12 @@ self.webdav = (function () {
     });
   }
 
+  /* Extract the best available cache-validator from response headers.
+     Prefer ETag (content-based); fall back to Last-Modified (time-based). */
+  function extractEtag(resp) {
+    return resp.headers.get("ETag") || resp.headers.get("Last-Modified") || null;
+  }
+
   async function upload(url, username, password, payload) {
     url = normalizeUrl(url);
     try {
@@ -78,7 +84,9 @@ self.webdav = (function () {
       }
 
       if (!resp.ok) return normalize(false, resp.status, "Upload failed: server returned " + resp.status);
-      return normalize(true, resp.status, "Uploaded");
+      var r = normalize(true, resp.status, "Uploaded");
+      r.etag = extractEtag(resp);
+      return r;
     } catch (err) {
       return normalize(false, 0, err.message || "Network error");
     }
@@ -99,12 +107,32 @@ self.webdav = (function () {
       try { data = JSON.parse(text); } catch (_) {
         return normalize(false, 0, "Server returned invalid JSON");
       }
-      return normalize(true, resp.status, "Downloaded", data);
+      var r = normalize(true, resp.status, "Downloaded", data);
+      r.etag = extractEtag(resp);
+      return r;
     } catch (err) {
       return normalize(false, 0, err.message || "Network error");
     }
   }
 
-  return { test: test, upload: upload, download: download };
+  /* Lightweight remote-change check — HEAD only, no body transferred.
+     Returns { ok, etag } where etag is ETag or Last-Modified. */
+  async function check(url, username, password) {
+    url = normalizeUrl(url);
+    try {
+      var resp = await fetch(url, {
+        method: "HEAD",
+        headers: { "Authorization": authHeader(username, password) }
+      });
+      if (!resp.ok) return normalize(false, resp.status, "Check failed");
+      var r = normalize(true, resp.status, "OK");
+      r.etag = extractEtag(resp);
+      return r;
+    } catch (err) {
+      return normalize(false, 0, err.message || "Network error");
+    }
+  }
+
+  return { test: test, upload: upload, download: download, check: check };
 
 }());

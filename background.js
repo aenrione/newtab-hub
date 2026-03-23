@@ -12,8 +12,11 @@ var SYNC_TRIGGER_SKIP = {
   "new-tab-sync-last": 1,
   "new-tab-sync-error": 1,
   "new-tab-sync-auth-failed": 1,
-  "new-tab-sync-pending": 1
+  "new-tab-sync-pending": 1,
+  "new-tab-sync-remote-etag": 1
 };
+
+var SYNC_ETAG_KEY = "new-tab-sync-remote-etag";
 
 var PAYLOAD_SKIP_EXACT = {
   "new-tab-cache": 1,
@@ -106,6 +109,7 @@ async function doUpload(isManual) {
       "new-tab-sync-pending": false
     };
     if (isManual) update["new-tab-sync-auth-failed"] = false;
+    if (result.etag) update[SYNC_ETAG_KEY] = result.etag;
     await storageSet(update);
   } else if (result.status === 401) {
     await storageSet({
@@ -174,6 +178,7 @@ async function doDownload() {
   toWrite["new-tab-sync-last"] = new Date().toISOString();
   toWrite["new-tab-sync-error"] = null;
   toWrite["new-tab-sync-auth-failed"] = false;
+  if (result.etag) toWrite[SYNC_ETAG_KEY] = result.etag;
 
   /* Guard against re-upload: the storage write below will fire onChanged for
      every dashboard key we just restored. Set isDownloading so the listener
@@ -280,7 +285,34 @@ chrome.alarms.onAlarm.addListener(async function (alarm) {
   await doUpload(false);
 });
 
-/* ── Message listener (from popup) ── */
+/* ── Auto-download on new tab open ── */
+
+/* Called when the newtab page loads. Does a cheap HEAD check first —
+   only proceeds to a full download if ETag/Last-Modified has changed
+   since the last sync. Skips entirely if a local upload is pending
+   (local data is newer than remote). */
+async function doAutoDownload() {
+  var url      = await storageGet("new-tab-webdav-url");
+  var username = await storageGet("new-tab-webdav-username");
+  var password = await storageGet("new-tab-webdav-password");
+
+  if (!url || !username) return;
+  if (await storageGet("new-tab-sync-auth-failed")) return;
+  if (await storageGet("new-tab-sync-pending")) return;
+
+  var check = await webdav.check(url, username, password || "");
+  if (!check.ok) return;
+
+  var remoteEtag = check.etag;
+  var storedEtag = await storageGet(SYNC_ETAG_KEY);
+
+  /* If we have a stored ETag and it matches the remote, nothing changed */
+  if (remoteEtag && remoteEtag === storedEtag) return;
+
+  await doDownload();
+}
+
+/* ── Message listener (from popup and newtab page) ── */
 
 chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   sendResponse({ received: true });
@@ -288,6 +320,8 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
     doUpload(true).catch(console.error);
   } else if (msg.action === "syncDownload") {
     doDownload().catch(console.error);
+  } else if (msg.action === "syncAutoDownload") {
+    doAutoDownload().catch(console.error);
   }
   return false; /* sendResponse already called synchronously */
 });

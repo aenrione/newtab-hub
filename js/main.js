@@ -652,6 +652,14 @@
       });
     }
 
+    /* Auto-download on new tab open: HEAD-check the remote file first.
+       Only triggers a full download if ETag/Last-Modified has changed
+       since the last sync, keeping the check nearly free. The existing
+       onChanged listener re-renders the page when the download completes. */
+    if (typeof chrome !== "undefined" && chrome.runtime) {
+      chrome.runtime.sendMessage({ action: "syncAutoDownload" });
+    }
+
     Hub.focusSearch();
   }
 
