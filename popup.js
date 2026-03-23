@@ -49,6 +49,8 @@ function formatStatus(data) {
   var last   = data["new-tab-sync-last"];
   var err    = data["new-tab-sync-error"];
 
+  setButtons(status === "syncing");
+
   if (status === "syncing") {
     statusLine.className = "status-line syncing";
     statusLine.textContent = "Syncing…";
@@ -63,7 +65,6 @@ function formatStatus(data) {
   statusLine.textContent = last
     ? "Last synced: " + new Date(last).toLocaleString()
     : "Never synced";
-  setButtons(status === "syncing");
 }
 
 /* ── Views ── */
@@ -232,7 +233,8 @@ btnUpload.addEventListener("click", async function () {
   setButtons(true);
   var resp = await sendToBackground({ action: "syncUpload" });
   if (resp.error) { disableWithError(); return; }
-  setButtons(false);
+  /* Buttons stay disabled; formatStatus re-enables them via storage.onChanged
+     once the background reports the final status (idle or error). */
 });
 
 btnDownload.addEventListener("click", async function () {
@@ -240,7 +242,8 @@ btnDownload.addEventListener("click", async function () {
   setButtons(true);
   var resp = await sendToBackground({ action: "syncDownload" });
   if (resp.error) { disableWithError(); return; }
-  setButtons(false);
+  /* Buttons stay disabled; formatStatus re-enables them via storage.onChanged
+     once the background reports the final status (idle or error). */
 });
 
 init();

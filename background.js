@@ -150,6 +150,7 @@ async function doDownload() {
   /* Strip local-only keys before writing */
   var toWrite = {};
   Object.keys(downloaded.data).forEach(function (k) {
+    if (PAYLOAD_SKIP_EXACT[k]) return;
     if (k.startsWith("new-tab-webdav-")) return;
     if (k.startsWith("new-tab-sync-")) return;
     toWrite[k] = downloaded.data[k];
@@ -164,12 +165,20 @@ async function doDownload() {
   toWrite["new-tab-sync-last"] = new Date().toISOString();
   toWrite["new-tab-sync-error"] = null;
   toWrite["new-tab-sync-auth-failed"] = false;
+
+  /* Guard against re-upload: the storage write below will fire onChanged for
+     every dashboard key we just restored. Set isDownloading so the listener
+     ignores those changes — there is nothing new to push back up. */
+  isDownloading = true;
   await storageSet(toWrite);
+  /* Reset after a tick to ensure onChanged has fired before we clear the guard. */
+  setTimeout(function () { isDownloading = false; }, 0);
 }
 
 /* ── Debounce ── */
 
 var debounceTimer = null;
+var isDownloading = false; /* True while doDownload is writing to storage — prevents download from triggering a re-upload */
 
 async function scheduleUpload() {
   var authFailed = await storageGet("new-tab-sync-auth-failed");
@@ -224,8 +233,9 @@ chrome.storage.onChanged.addListener(function (changes, area) {
   }
 
   /* Check if any non-excluded dashboard key changed */
+  if (isDownloading) return;
   var relevant = Object.keys(changes).some(function (k) {
-    return k.startsWith("new-tab-") && !SYNC_TRIGGER_SKIP[k];
+    return k.startsWith("new-tab-") && !SYNC_TRIGGER_SKIP[k] && !k.startsWith("new-tab-sync-");
   });
   if (!relevant) return;
 
