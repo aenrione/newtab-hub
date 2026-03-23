@@ -182,7 +182,9 @@ Hub.customize = (function () {
     bgWrap.className = "bg-image-controls";
 
     var currentBg = Object.assign({}, Hub.DEFAULT_BG);
-    store.get(Hub.STORAGE_BG_IMAGE_KEY).then(function (saved) {
+    store.get(Hub.STORAGE_BG_IMAGE_KEY).then(function (all) {
+      /* Guard against stale flat format */
+      var saved = (all && all.src === undefined && profileName && all[profileName]) ? all[profileName] : null;
       if (saved) {
         Object.assign(currentBg, saved);
         bgUrlInput.value = currentBg.src || "";
@@ -525,7 +527,7 @@ Hub.customize = (function () {
       }
       delete bgToSave._isObjectUrl;
       delete bgToSave.mimeType;
-      await Hub.saveBgImage(store, bgToSave);
+      await Hub.saveBgImage(store, profileName, bgToSave);
       closeThemeSidebar();
     });
 
@@ -539,14 +541,19 @@ Hub.customize = (function () {
           if (k.startsWith("new-tab-webdav-") || k.startsWith("new-tab-sync-")) return;
           data[k] = all[k];
         });
-        /* Sanitize video backgrounds — keep URLs, strip blobs/object URLs */
-        var bg = data[Hub.STORAGE_BG_IMAGE_KEY];
-        if (bg && bg.src) {
-          var isVideo = (bg.type === "video") || Hub.detectBgType(bg.src) === "video";
-          if (isVideo && !bg.src.startsWith("http")) {
-            bg = Object.assign({}, bg, { src: null });
-            data[Hub.STORAGE_BG_IMAGE_KEY] = bg;
-          }
+        /* Sanitize video backgrounds — keep URLs, strip blobs/object URLs (per-profile) */
+        var bgAll = data[Hub.STORAGE_BG_IMAGE_KEY];
+        if (bgAll && typeof bgAll === "object" && bgAll.src === undefined) {
+          var bgSanitized = {};
+          Object.keys(bgAll).forEach(function (p) {
+            var bg = bgAll[p];
+            if (bg && bg.src && bg.type === "video" && !bg.src.startsWith("http")) {
+              bgSanitized[p] = Object.assign({}, bg, { src: null });
+            } else {
+              bgSanitized[p] = bg;
+            }
+          });
+          data[Hub.STORAGE_BG_IMAGE_KEY] = bgSanitized;
         }
         var envelope = { version: 1, exportedAt: new Date().toISOString(), data: data };
         var blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
@@ -613,7 +620,7 @@ Hub.customize = (function () {
       await store.set(Hub.STORAGE_THEME_KEY, {});
       await store.set(Hub.STORAGE_STYLE_KEY, {});
       await store.set(Hub.STORAGE_CUSTOM_CSS_KEY, "");
-      await Hub.saveBgImage(store, null);
+      await Hub.saveBgImage(store, profileName, null);
       var pvVid = bgPreview.querySelector("video");
       if (pvVid) pvVid.remove();
       bgWarn.style.display = "none";

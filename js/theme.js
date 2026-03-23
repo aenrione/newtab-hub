@@ -479,8 +479,14 @@ Hub.applyBgImage = function (settings) {
   }
 };
 
-Hub.loadBgImage = async function (store) {
-  var settings = await store.get(Hub.STORAGE_BG_IMAGE_KEY);
+Hub.loadBgImage = async function (store, profileName) {
+  var all = await store.get(Hub.STORAGE_BG_IMAGE_KEY);
+  /* Migrate flat legacy format (had top-level src) — discard and write clean object */
+  if (all && all.src !== undefined) {
+    await store.set(Hub.STORAGE_BG_IMAGE_KEY, {});
+    all = {};
+  }
+  var settings = (all && profileName && all[profileName]) || null;
   if (settings && settings.src) {
     settings.type = Hub.detectBgType(settings.src);
   }
@@ -488,12 +494,16 @@ Hub.loadBgImage = async function (store) {
   return settings || {};
 };
 
-Hub.saveBgImage = async function (store, settings) {
+Hub.saveBgImage = async function (store, profileName, settings) {
+  var all = await store.get(Hub.STORAGE_BG_IMAGE_KEY) || {};
+  /* Guard against stale flat format */
+  if (all.src !== undefined) all = {};
   if (settings && settings.src) {
-    await store.set(Hub.STORAGE_BG_IMAGE_KEY, settings);
+    all[profileName] = settings;
   } else {
-    await store.set(Hub.STORAGE_BG_IMAGE_KEY, null);
+    delete all[profileName];
   }
+  await store.set(Hub.STORAGE_BG_IMAGE_KEY, all);
 };
 
 Hub.loadTheme = async function (store, profileName, profileConfig) {
