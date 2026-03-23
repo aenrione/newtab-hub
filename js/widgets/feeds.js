@@ -62,12 +62,14 @@ Hub.registry.register("feeds", {
     listEl.replaceChildren(frag.childNodes.length ? frag : emptyNode("No feeds."));
   },
 
-  renderEditor: function (container, config, onChange) {
+  renderEditor: function (container, config, onChange, navOptions) {
     container.replaceChildren();
     var titleLabel = document.createElement("label");
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Feeds") + '" />';
-    titleLabel.querySelector("input").addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
+    var titleInput = titleLabel.querySelector("input");
+    titleInput.dataset.navHeaderField = "";
+    titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
     var itemsWrap = document.createElement("div");
@@ -76,7 +78,7 @@ Hub.registry.register("feeds", {
       { key: "title", label: "Title" },
       { key: "url", label: "Feed URL" },
       { key: "site", label: "Site URL" }
-    ], function () { return { title: "", url: "https://", site: "https://" }; });
+    ], function () { return { title: "", url: "https://", site: "https://" }; }, navOptions);
   },
 
   defaultConfig: function () {

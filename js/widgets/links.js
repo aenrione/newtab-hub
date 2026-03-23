@@ -44,14 +44,16 @@ Hub.registry.register("link-group", {
     container.replaceChildren(wrapper);
   },
 
-  renderEditor: function (container, config, onChange) {
+  renderEditor: function (container, config, onChange, navOptions) {
     container.replaceChildren();
 
     /* Title field */
     var titleLabel = document.createElement("label");
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Group title</span><input type="text" value="' + Hub.escapeHtml(config.title || "") + '" />';
-    titleLabel.querySelector("input").addEventListener("input", function (e) {
+    var titleInput = titleLabel.querySelector("input");
+    titleInput.dataset.navHeaderField = "";
+    titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);
     });
@@ -65,7 +67,7 @@ Hub.registry.register("link-group", {
       { key: "href", label: "URL" },
       { key: "badge", label: "Badge" },
       { key: "healthCheck", label: "Health", placeholder: "auto or URL" }
-    ], function () { return { title: "", href: "https://", badge: "", healthCheck: "" }; });
+    ], function () { return { title: "", href: "https://", badge: "", healthCheck: "" }; }, navOptions);
   },
 
   defaultConfig: function () {

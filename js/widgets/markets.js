@@ -61,13 +61,15 @@ Hub.registry.register("markets", {
     listEl.replaceChildren(frag.childNodes.length ? frag : emptyNode("No data."));
   },
 
-  renderEditor: function (container, config, onChange) {
+  renderEditor: function (container, config, onChange, navOptions) {
     container.replaceChildren();
 
     var titleLabel = document.createElement("label");
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Markets") + '" />';
-    titleLabel.querySelector("input").addEventListener("input", function (e) {
+    var titleInput = titleLabel.querySelector("input");
+    titleInput.dataset.navHeaderField = "";
+    titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);
     });
@@ -85,7 +87,7 @@ Hub.registry.register("markets", {
       { key: "symbol", label: "Symbol" },
       { key: "coinGeckoId", label: "CoinGecko ID", placeholder: "bitcoin, ethereum..." },
       { key: "href", label: "Chart URL" }
-    ], function () { return { label: "", symbol: "", coinGeckoId: "", href: "https://" }; });
+    ], function () { return { label: "", symbol: "", coinGeckoId: "", href: "https://" }; }, navOptions);
   },
 
   defaultConfig: function () {
