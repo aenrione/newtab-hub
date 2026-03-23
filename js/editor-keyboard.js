@@ -151,6 +151,9 @@ EditorKeyboard.prototype._getAddBtn = function () {
 
 EditorKeyboard.prototype._highlightHeader = function (index) {
   this._unhighlightHeaders();
+  // Always clear item highlights — only one thing should be highlighted at a time
+  this.items.forEach(function (el) { el.classList.remove("editor-nav-focused"); });
+  this._clearHints();
   if (index < 0 || index >= this.headerFields.length) return;
   this.activeHeaderIndex = index;
   var label = this.headerFields[index].parentElement;
