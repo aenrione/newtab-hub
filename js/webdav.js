@@ -11,7 +11,15 @@ self.webdav = (function () {
     return { ok: ok, status: status, message: message, data: data || null };
   }
 
+  /* If the URL looks like a directory (last segment has no dot), append newtab.json */
+  function normalizeUrl(url) {
+    var clean = url.replace(/\/$/, "");
+    var last = clean.split("/").pop();
+    return last.indexOf(".") === -1 ? clean + "/newtab.json" : clean;
+  }
+
   async function test(url, username, password) {
+    url = normalizeUrl(url);
     try {
       var resp = await fetch(url, {
         method: "HEAD",
@@ -55,6 +63,7 @@ self.webdav = (function () {
   }
 
   async function upload(url, username, password, payload) {
+    url = normalizeUrl(url);
     try {
       var body = JSON.stringify(payload);
       var resp = await putOnce(url, username, password, body);
@@ -76,6 +85,7 @@ self.webdav = (function () {
   }
 
   async function download(url, username, password) {
+    url = normalizeUrl(url);
     try {
       var resp = await fetch(url, {
         method: "GET",
