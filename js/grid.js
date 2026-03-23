@@ -11,6 +11,47 @@ Hub.grid = (function () {
   var editBar = null;
   var editClone = null; /* deep clone of widgets during edit mode */
 
+  /* Keys that are actions in edit mode and must not be used as chord shortcuts */
+  var EDIT_ACTION_KEYS = { g: 1, x: 1, e: 1 };
+
+  /* Edit-mode chord: derived from keyboard.js widgetKeyMap, minus edit-mode action keys.
+     Widgets excluded from normal-mode chords (e.g. pinned-links) get a fresh key assigned. */
+  function buildEditChordMap(gridEl) {
+    var keyMap   = Hub.keyboard.getWidgetKeyMap();
+    var ergoKeys = Hub.keyboard.ERGO_KEYS;
+    var reserved = Hub.keyboard.RESERVED;
+
+    /* Collect already-used keys so we don't double-assign */
+    var used = {};
+    var widgetFirstKey = new Map();
+
+    Object.keys(keyMap).forEach(function (key) {
+      used[key] = true;
+      if (EDIT_ACTION_KEYS[key]) return;
+      var widgetEl = keyMap[key].widgetEl;
+      if (!widgetFirstKey.has(widgetEl)) widgetFirstKey.set(widgetEl, key);
+    });
+
+    /* Assign keys to editable widgets not covered by widgetKeyMap (e.g. pinned-links) */
+    getEditableWidgets(gridEl).forEach(function (el) {
+      if (widgetFirstKey.has(el)) return;
+      for (var i = 0; i < ergoKeys.length; i++) {
+        var k = ergoKeys[i];
+        if (!reserved[k] && !EDIT_ACTION_KEYS[k] && !used[k]) {
+          used[k] = true;
+          widgetFirstKey.set(el, k);
+          break;
+        }
+      }
+    });
+
+    getEditableWidgets(gridEl).forEach(function (el) {
+      var key = widgetFirstKey.get(el);
+      if (key) el.dataset.editChordKey = key;
+      else delete el.dataset.editChordKey;
+    });
+  }
+
   function setEditClone(widgets) {
     editClone = widgets.map(function (w) {
       return Object.assign({}, w, { config: JSON.parse(JSON.stringify(w.config || {})) });
@@ -218,7 +259,7 @@ Hub.grid = (function () {
     function close() {
       document.removeEventListener("keydown", onConfigKey);
       overlay.remove();
-      if (onSave) onSave();
+      if (onSave) onSave(widgetId);
     }
     closeBtn.addEventListener("click", close);
     doneBtn.addEventListener("click", close);
@@ -472,6 +513,26 @@ Hub.grid = (function () {
       return true;
     }
 
+    /* Letter chord: jump-focus a widget using the same keys as normal mode.
+       Also covers widgets excluded from normal chords (e.g. pinned-links) via editChordKey. */
+    if (/^[a-z]$/.test(key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !EDIT_ACTION_KEYS[key]) {
+      /* Try widgetKeyMap first (covers most widgets) */
+      var km = Hub.keyboard.getWidgetKeyMap();
+      var entry = km[key];
+      if (entry && entry.widgetEl && entry.widgetEl.classList.contains("widget-editable")) {
+        e.preventDefault();
+        setEditFocus(entry.widgetEl);
+        return true;
+      }
+      /* Fallback: widgets assigned a key only in edit mode (e.g. pinned-links) */
+      var el = gridEl.querySelector(".widget-editable[data-edit-chord-key='" + key + "']");
+      if (el) {
+        e.preventDefault();
+        setEditFocus(el);
+        return true;
+      }
+    }
+
     if (!editFocusedWidget) return false;
 
     var w = editFocusedWidget;
@@ -522,8 +583,8 @@ Hub.grid = (function () {
       return true;
     }
 
-    /* G: open config */
-    if (key === "g" && !e.metaKey && !e.ctrlKey) {
+    /* G or Enter: open config */
+    if ((key === "g" || key === "Enter") && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       var gearBtn = w.querySelector(".widget-edit-btn.is-gear");
       if (gearBtn) gearBtn.click();
@@ -622,6 +683,19 @@ Hub.grid = (function () {
       gearBtn.addEventListener("click", function () { openConfigModal(w.dataset.widgetId, onConfigSave); });
 
       trashBtn.addEventListener("click", function () { removeWidget(w.dataset.widgetId, gridEl); });
+    });
+
+    /* Build chord map and stamp key badges onto each widget's drag handle */
+    buildEditChordMap(gridEl);
+    getEditableWidgets(gridEl).forEach(function (el) {
+      var key = el.dataset.editChordKey;
+      if (!key) return;
+      var dragBtn = el.querySelector(".widget-edit-btn.is-drag");
+      if (!dragBtn) return;
+      var badge = document.createElement("span");
+      badge.className = "edit-chord-badge";
+      badge.textContent = key.toUpperCase();
+      dragBtn.after(badge);
     });
 
     function onMouseMove(e) {
