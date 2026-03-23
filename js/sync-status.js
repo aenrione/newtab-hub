@@ -90,9 +90,11 @@ Hub.syncStatus = (function () {
 
     setTimeout(function () {
       toast.classList.remove("is-visible");
-      toast.addEventListener("transitionend", function () {
+      function onEnd() {
+        toast.removeEventListener("transitionend", onEnd);
         if (toast.parentNode) toast.parentNode.removeChild(toast);
-      }, { once: true });
+      }
+      toast.addEventListener("transitionend", onEnd);
     }, 3000);
   }
 
@@ -138,6 +140,7 @@ Hub.syncStatus = (function () {
 
   function storageGet(keys) {
     return new Promise(function (resolve) {
+      if (typeof chrome === "undefined" || !chrome.storage) { resolve({}); return; }
       chrome.storage.local.get(keys, function (r) { resolve(r || {}); });
     });
   }
@@ -162,12 +165,13 @@ Hub.syncStatus = (function () {
     var errMsg = currentData["new-tab-sync-error"] || "Unknown error";
 
     /* Only fire toast when sync has settled (idle or error) */
+    var kind = "";
     if (status === "idle") {
-      var kind = pendingToast;
+      kind = pendingToast;
       pendingToast = null;
       showToast(kind === "pull" ? "Pulled" : "Pushed");
     } else if (status === "error") {
-      var kind = pendingToast;
+      kind = pendingToast;
       pendingToast = null;
       showToast(kind === "pull" ? "Pull failed: " + errMsg : "Push failed: " + errMsg);
     }
@@ -200,14 +204,18 @@ Hub.syncStatus = (function () {
     }, 30000);
 
     /* Listen for storage changes */
-    chrome.storage.onChanged.addListener(onStorageChanged);
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(onStorageChanged);
+    }
   }
 
   function pull() {
     if (!currentData["new-tab-webdav-url"]) return;
     if (currentData["new-tab-sync-status"] === "syncing") return;
     pendingToast = "pull";
-    chrome.runtime.sendMessage({ action: "syncDownload" });
+    if (typeof chrome !== "undefined" && chrome.runtime) {
+      chrome.runtime.sendMessage({ action: "syncDownload" });
+    }
   }
 
   function confirmPush() {
@@ -215,7 +223,9 @@ Hub.syncStatus = (function () {
     if (currentData["new-tab-sync-status"] === "syncing") return;
     showConfirmToast(function () {
       pendingToast = "push";
-      chrome.runtime.sendMessage({ action: "syncUpload" });
+      if (typeof chrome !== "undefined" && chrome.runtime) {
+        chrome.runtime.sendMessage({ action: "syncUpload" });
+      }
     });
   }
 
