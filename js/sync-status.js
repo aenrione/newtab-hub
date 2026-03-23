@@ -52,14 +52,17 @@ Hub.syncStatus = (function () {
     var labelEl = badge.querySelector(".sync-badge-label");
 
     if (status === "syncing") {
+      badge.classList.remove("is-error");
       iconEl.innerHTML = SPIN_SVG;
       labelEl.textContent = "";
       badge.title = "Syncing\u2026";
     } else if (status === "error") {
+      badge.classList.add("is-error");
       iconEl.innerHTML = ALERT_SVG;
       labelEl.textContent = "Sync error";
       badge.title = error || "Unknown error";
     } else {
+      badge.classList.remove("is-error");
       /* idle (default) */
       var rel = relativeTime(last);
       iconEl.innerHTML = CLOUD_SVG;

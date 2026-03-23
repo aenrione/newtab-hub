@@ -1382,7 +1382,6 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   font-size: 0.72rem;
   color: var(--muted);
   z-index: 100;
-  pointer-events: none;
   user-select: none;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
