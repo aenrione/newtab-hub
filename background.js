@@ -159,6 +159,7 @@ async function doDownload() {
   toWrite["new-tab-sync-status"] = "idle";
   toWrite["new-tab-sync-last"] = new Date().toISOString();
   toWrite["new-tab-sync-error"] = null;
+  toWrite["new-tab-sync-auth-failed"] = false;
   await storageSet(toWrite);
 }
 
