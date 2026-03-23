@@ -97,77 +97,79 @@
 
   /* ── Profile management ── */
 
-  function normalizeManifest(src) {
-    if (!src) return { defaultProfile: "default", profiles: [] };
-    if (Array.isArray(src.profiles)) return { defaultProfile: src.defaultProfile || src.profiles[0]?.id || "default", profiles: src.profiles };
-    return { defaultProfile: "default", profiles: [] };
-  }
-
-  function optionalScript(path) {
-    return new Promise(function (resolve) {
-      var s = document.createElement("script");
-      s.src = path; s.async = false;
-      s.onload = function () { resolve(true); };
-      s.onerror = function () { resolve(false); };
-      document.head.appendChild(s);
-    });
-  }
-
-  function mergeWidgets(shared, priv) {
-    var map = new Map();
-    (shared || []).forEach(function (w) {
-      map.set(w.id, Object.assign({}, w, { config: JSON.parse(JSON.stringify(w.config || {})) }));
-    });
-    (priv || []).forEach(function (w) {
-      if (map.has(w.id)) {
-        var existing = map.get(w.id);
-        var ec = existing.config || {};
-        var pc = w.config || {};
-
-        /* Merge grid position only if private explicitly provides it */
-        if (w.col) existing.col = w.col;
-        if (w.row) existing.row = w.row;
-        if (w.width) existing.width = w.width;
-        if (w.height) existing.height = w.height;
-
-        /* For configs with items arrays, concatenate instead of overwrite */
-        if (Array.isArray(ec.items) && Array.isArray(pc.items)) {
-          ec.items = ec.items.concat(pc.items);
-        } else {
-          Object.assign(ec, pc);
-        }
-      } else {
-        map.set(w.id, Object.assign({}, w, { config: JSON.parse(JSON.stringify(w.config || {})) }));
-      }
-    });
-    return Array.from(map.values());
-  }
+  var PERSONAL_SEED = {
+    label: "Personal",
+    widgets: [
+      { id: "search", type: "search", col: 1, row: 1, width: 12, height: 1, config: { searchBaseUrl: "https://duckduckgo.com/?q=" } },
+      { id: "pinned", type: "pinned-links", col: 1, row: 2, width: 12, height: 1, config: {
+        items: [
+          { title: "Gmail", href: "https://mail.google.com/" },
+          { title: "YouTube", href: "https://www.youtube.com/" },
+          { title: "Spotify", href: "https://open.spotify.com/", badge: "Music", healthCheck: true },
+          { title: "GitHub", href: "https://github.com/" },
+          { title: "Notion", href: "https://www.notion.so/" },
+          { title: "TradingView", href: "https://www.tradingview.com/", healthCheck: true }
+        ]
+      }},
+      { id: "daily", type: "link-group", col: 1, row: 3, width: 4, height: 1, config: {
+        title: "Daily",
+        items: [
+          { title: "Calendar", href: "https://calendar.google.com/" },
+          { title: "Drive", href: "https://drive.google.com/" },
+          { title: "WhatsApp", href: "https://web.whatsapp.com/" },
+          { title: "Maps", href: "https://maps.google.com/" }
+        ]
+      }},
+      { id: "read", type: "link-group", col: 5, row: 3, width: 4, height: 1, config: {
+        title: "Read",
+        items: [
+          { title: "Hacker News", href: "https://news.ycombinator.com/" },
+          { title: "The Verge", href: "https://www.theverge.com/" },
+          { title: "Ars Technica", href: "https://arstechnica.com/" },
+          { title: "YouTube", href: "https://www.youtube.com/" }
+        ]
+      }},
+      { id: "markets", type: "markets", col: 9, row: 3, width: 4, height: 1, config: {
+        title: "Markets",
+        items: [
+          { label: "Bitcoin", symbol: "BTC", coinGeckoId: "bitcoin", href: "https://www.tradingview.com/symbols/BTCUSD/" },
+          { label: "Ethereum", symbol: "ETH", coinGeckoId: "ethereum", href: "https://www.tradingview.com/symbols/ETHUSD/" }
+        ]
+      }},
+      { id: "finance", type: "link-group", col: 1, row: 4, width: 4, height: 1, config: {
+        title: "Finance",
+        items: [
+          { title: "TradingView", href: "https://www.tradingview.com/", badge: "Charts" },
+          { title: "Koyfin", href: "https://app.koyfin.com/" },
+          { title: "Fintual", href: "https://fintual.cl/" },
+          { title: "Fintoc", href: "https://app.fintoc.com/" }
+        ]
+      }},
+      { id: "feeds", type: "feeds", col: 5, row: 4, width: 8, height: 1, config: {
+        title: "Feeds",
+        items: [
+          { title: "HN Front Page", url: "https://hnrss.org/frontpage", site: "https://news.ycombinator.com/" },
+          { title: "The Verge", url: "https://www.theverge.com/rss/index.xml", site: "https://www.theverge.com/" }
+        ]
+      }}
+    ]
+  };
 
   async function loadBundle() {
-    await optionalScript("config.private.js");
-    var sm = normalizeManifest(window.NEW_TAB_SHARED_CONFIG);
-    var pm = normalizeManifest(window.NEW_TAB_PRIVATE_CONFIG);
-    window.NEW_TAB_SHARED_PROFILES = window.NEW_TAB_SHARED_PROFILES || {};
-    window.NEW_TAB_PRIVATE_PROFILES = window.NEW_TAB_PRIVATE_PROFILES || {};
-    await Promise.all(sm.profiles.concat(pm.profiles).map(function (e) { return optionalScript(e.file); }));
+    var profiles = await state.store.get(Hub.STORAGE_PROFILES_KEY);
 
-    var sp = window.NEW_TAB_SHARED_PROFILES || {};
-    var pp = window.NEW_TAB_PRIVATE_PROFILES || {};
-    var names = new Set(Object.keys(sp).concat(Object.keys(pp)));
-    var profiles = {};
-    names.forEach(function (n) {
-      var shared = sp[n] || {};
-      var priv = pp[n] || {};
-      profiles[n] = {
-        label: priv.label || shared.label || n,
-        widgets: mergeWidgets(shared.widgets, priv.widgets)
-      };
-    });
+    /* Guard: seed personal if storage is empty (new install handled by onInstalled,
+       this catches upgrade path and edge case where sync deleted all profiles). */
+    if (!profiles || Object.keys(profiles).length === 0) {
+      profiles = { personal: PERSONAL_SEED };
+      await state.store.set(Hub.STORAGE_PROFILES_KEY, profiles);
+      await state.store.set(Hub.STORAGE_DEFAULT_PROFILE_KEY, "personal");
+    }
 
-    return {
-      defaultProfile: sm.defaultProfile || pm.defaultProfile || Object.keys(profiles)[0],
-      profiles: profiles
-    };
+    var defaultProfile = (await state.store.get(Hub.STORAGE_DEFAULT_PROFILE_KEY))
+      || Object.keys(profiles)[0];
+
+    return { defaultProfile: defaultProfile, profiles: profiles };
   }
 
   function resolvedWidgets() {
