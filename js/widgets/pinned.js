@@ -64,14 +64,13 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   var addBtn = document.createElement("button");
   addBtn.className = "toolbar-button toolbar-button-ghost";
   addBtn.type = "button";
-  addBtn.textContent = "Add";
+  addBtn.textContent = "+ Add";
   addBtn.dataset.navAdd = "";                              // ← NEW
   addBtn.addEventListener("click", function () {
     config[listKey].push(emptyItem());
     onChange(config);
     buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions);
   });
-  container.appendChild(addBtn);
 
   var listWrap = document.createElement("div");
   listWrap.className = "editor-items";
@@ -80,6 +79,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
   if (!items.length) {
     listWrap.appendChild(emptyNode("None yet."));
+    container.appendChild(addBtn);
     if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
     return;
   }
@@ -174,5 +174,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
     listWrap.appendChild(card);
   });
+  container.appendChild(addBtn);
   if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
 }
