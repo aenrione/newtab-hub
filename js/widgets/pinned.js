@@ -33,13 +33,13 @@ Hub.registry.register("pinned-links", {
     container.appendChild(grid);
   },
 
-  renderEditor: function (container, config, onChange) {
+  renderEditor: function (container, config, onChange, navOptions) {
     buildListEditor(container, config, "items", onChange, [
       { key: "title", label: "Title" },
       { key: "href", label: "URL" },
       { key: "badge", label: "Badge" },
       { key: "healthCheck", label: "Health", placeholder: "auto or URL" }
-    ], function () { return { title: "", href: "https://", badge: "", healthCheck: "" }; });
+    ], function () { return { title: "", href: "https://", badge: "", healthCheck: "" }; }, navOptions);
   },
 
   defaultConfig: function () {
@@ -58,7 +58,6 @@ function emptyNode(text) {
 
 function buildListEditor(container, config, listKey, onChange, fields, emptyItem, navOptions) {
   container.replaceChildren();
-  if (navOptions && navOptions.onRebuild) navOptions.onRebuild();  // notify on every rebuild
   var items = config[listKey] || [];
   var dragSrcIndex = null;
 
@@ -76,6 +75,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
   if (!items.length) {
     container.appendChild(emptyNode("None yet."));
+    if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
     return;
   }
 
@@ -173,4 +173,5 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
     listWrap.appendChild(card);
   });
+  if (navOptions && navOptions.onRebuild) navOptions.onRebuild();
 }
