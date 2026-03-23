@@ -376,6 +376,17 @@
     });
   }
 
+  function slugify(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "profile";
+  }
+
+  function uniqueProfileId(profiles, base) {
+    if (!profiles[base]) return base;
+    var n = 2;
+    while (profiles[base + "-" + n]) { n++; }
+    return base + "-" + n;
+  }
+
   /* ── Profile switcher ── */
 
   function bindProfileSwitcher() {
@@ -383,6 +394,52 @@
     var dropdown = document.getElementById("profile-dropdown");
 
     btn.innerHTML = Hub.icons.user + Hub.icons.chevronDown;
+
+    function buildNewProfileInput() {
+      var wrapper = document.createElement("div");
+      wrapper.className = "profile-dropdown-new-input";
+
+      var input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Profile name";
+      input.className = "profile-dropdown-input";
+      input.setAttribute("autofocus", "");
+
+      async function confirm() {
+        var name = input.value.trim();
+        if (!name) { renderDropdown(); return; }
+        var profiles = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
+        var id = uniqueProfileId(profiles, slugify(name));
+        profiles[id] = {
+          label: name,
+          widgets: [
+            { id: "search", type: "search", col: 1, row: 1, width: 12, height: 1,
+              config: { searchBaseUrl: "https://duckduckgo.com/?q=" } }
+          ]
+        };
+        await state.store.set(Hub.STORAGE_PROFILES_KEY, profiles);
+        await state.store.set(Hub.STORAGE_KEY, id);
+        dropdown.classList.remove("is-open");
+        state.bundle = await loadBundle();
+        await renderDashboard(id);
+      }
+
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); confirm(); }
+        if (e.key === "Escape") { e.preventDefault(); renderDropdown(); }
+      });
+
+      var okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.textContent = "Add";
+      okBtn.className = "profile-dropdown-add-btn";
+      okBtn.addEventListener("click", confirm);
+
+      wrapper.appendChild(input);
+      wrapper.appendChild(okBtn);
+      setTimeout(function () { input.focus(); }, 0);
+      return wrapper;
+    }
 
     function renderDropdown() {
       dropdown.replaceChildren();
@@ -401,6 +458,17 @@
         });
         dropdown.appendChild(item);
       });
+
+      /* New profile entry */
+      var newProfileBtn = document.createElement("button");
+      newProfileBtn.className = "profile-dropdown-item profile-dropdown-new";
+      newProfileBtn.type = "button";
+      newProfileBtn.textContent = "+ New profile";
+      newProfileBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        newProfileBtn.replaceWith(buildNewProfileInput());
+      });
+      dropdown.appendChild(newProfileBtn);
 
       /* Divider + Reset */
       var divider = document.createElement("div");
