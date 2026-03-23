@@ -326,18 +326,24 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
     /* Async handler — must return true to keep message channel open until
        sendResponse is called. The response signals main.js the write is done. */
     (async function () {
-      /* Clear any pending upload so a queued alarm cannot push this deletion to remote */
-      await storageSet({ "new-tab-sync-pending": false });
-      if (debounceTimer !== null) { clearTimeout(debounceTimer); debounceTimer = null; }
+      try {
+        /* Clear any pending upload so a queued alarm cannot push this deletion to remote */
+        await storageSet({ "new-tab-sync-pending": false });
+        if (debounceTimer !== null) { clearTimeout(debounceTimer); debounceTimer = null; }
 
-      isSuppressingUpload = true;
-      var profiles = (await storageGet("new-tab-profiles")) || {};
-      delete profiles[msg.id];
-      await storageSet({ "new-tab-profiles": profiles });
-      setTimeout(function () { isSuppressingUpload = false; }, 0);
+        isSuppressingUpload = true;
+        var profiles = (await storageGet("new-tab-profiles")) || {};
+        delete profiles[msg.id];
+        await storageSet({ "new-tab-profiles": profiles });
+        setTimeout(function () { isSuppressingUpload = false; }, 0);
 
-      sendResponse({ received: true });
-    }()).catch(console.error);
+        sendResponse({ received: true });
+      } catch (err) {
+        console.error(err);
+        isSuppressingUpload = false;
+        sendResponse({ error: err.message });
+      }
+    }());
     return true; /* keep channel open for async sendResponse */
   }
 
