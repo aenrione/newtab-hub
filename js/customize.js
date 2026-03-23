@@ -589,7 +589,11 @@ Hub.customize = (function () {
         if (!confirm("This will replace all your current settings. Continue?")) return;
         try {
           var keys = Object.keys(parsed.data).filter(function (k) {
-            return k.startsWith("new-tab-") && k !== "new-tab-cache";
+            return k.startsWith("new-tab-") &&
+              k !== "new-tab-cache" &&
+              k !== "new-tab-v2-migrated" &&
+              !k.startsWith("new-tab-webdav-") &&
+              !k.startsWith("new-tab-sync-");
           });
           for (var i = 0; i < keys.length; i++) {
             await store.set(keys[i], parsed.data[keys[i]]);
