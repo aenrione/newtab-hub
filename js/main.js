@@ -310,8 +310,9 @@
       });
     };
 
-    /* Apply theme */
+    /* Apply theme and per-profile background */
     await Hub.loadTheme(state.store, profileName, profile);
+    await Hub.loadBgImage(state.store, profileName);
 
     /* Cache favicons after images have a chance to load */
     setTimeout(function () { Hub.cacheFavicons(state.store); }, 2000);
@@ -496,12 +497,37 @@
       await renderDashboard(state.activeProfile);
     }
 
-    async function onConfigSave() {
+    async function onConfigSave(widgetId) {
       /* Persist config changes immediately when config modal closes */
       var clone = Hub.grid.getEditClone();
       if (clone) {
         state.profileOverrides[state.activeProfile] = { widgets: clone };
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
+      }
+      /* Preview the updated widget tile while still in edit mode */
+      if (widgetId && clone) {
+        var w = clone.find(function (ww) { return ww.id === widgetId; });
+        var el = widgetElements[widgetId];
+        if (w && el) {
+          var plugin = Hub.registry.get(w.type);
+          if (plugin && plugin.render) {
+            state._collapsedGroups = new Set(state.collapsedGroups[state.activeProfile] || []);
+            state._onToggleGroup = function (title, isOpen) {
+              var s = new Set(state.collapsedGroups[state.activeProfile] || []);
+              if (isOpen) s.delete(title); else s.add(title);
+              state.collapsedGroups[state.activeProfile] = Array.from(s);
+              state.store.set(Hub.STORAGE_COLLAPSED_KEY, state.collapsedGroups);
+            };
+            /* Save edit controls before render wipes innerHTML */
+            var editControls = el.querySelector(".widget-edit-controls");
+            var resizeHandle = el.querySelector(".widget-resize-handle");
+            plugin.render(el, w.config || {}, state);
+            /* Restore edit controls so drag/gear/trash still work */
+            if (editControls) el.prepend(editControls);
+            if (resizeHandle) el.appendChild(resizeHandle);
+            if (plugin.load) plugin.load(el, w.config || {}, state, state.renderToken);
+          }
+        }
       }
     }
 
@@ -567,7 +593,6 @@
     }
     await Hub.loadStyleOverrides(state.store);
     await Hub.loadCustomCss(state.store);
-    await Hub.loadBgImage(state.store);
 
     state.bundle = await loadBundle();
     state.profileOverrides = (await state.store.get(Hub.STORAGE_OVERRIDES_KEY)) || {};
@@ -613,6 +638,19 @@
     Hub.zen.init(function () { return state; });
 
     await renderDashboard(activeProfile);
+
+    /* Re-render when a WebDAV sync completes — picks up downloaded config
+       without requiring a page reload. Fires on both upload and download
+       completions; re-rendering after upload is harmless (same data). */
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(async function (changes, area) {
+        if (area !== "local") return;
+        if (!changes["new-tab-sync-last"]) return;
+        if (Hub.grid.isEditing()) return;
+        state.profileOverrides = (await state.store.get(Hub.STORAGE_OVERRIDES_KEY)) || {};
+        await renderDashboard(state.activeProfile);
+      });
+    }
 
     Hub.focusSearch();
   }

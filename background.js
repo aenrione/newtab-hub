@@ -57,11 +57,20 @@ function buildPayload(all) {
     }
   });
 
-  /* Sanitize video backgrounds — strip non-http video src (blob:, data:, object:) */
+  /* Sanitize video backgrounds — strip non-http video srcs (blob:, data:) per profile */
   var bgKey = "new-tab-bg-image";
-  var bg = data[bgKey];
-  if (bg && bg.src && bg.type === "video" && !bg.src.startsWith("http")) {
-    data[bgKey] = Object.assign({}, bg, { src: null });
+  var bgAll = data[bgKey];
+  if (bgAll && typeof bgAll === "object" && bgAll.src === undefined) {
+    var bgSanitized = {};
+    Object.keys(bgAll).forEach(function (p) {
+      var bg = bgAll[p];
+      if (bg && bg.src && bg.type === "video" && !bg.src.startsWith("http")) {
+        bgSanitized[p] = Object.assign({}, bg, { src: null });
+      } else {
+        bgSanitized[p] = bg;
+      }
+    });
+    data[bgKey] = bgSanitized;
   }
 
   return { version: 1, exportedAt: new Date().toISOString(), data: data };
@@ -241,6 +250,21 @@ chrome.storage.onChanged.addListener(function (changes, area) {
 
   scheduleUpload().catch(console.error);
 });
+
+/* ── Startup recovery ── */
+
+/* If the SW was killed while a sync was in-flight, status will be stuck
+   at "syncing" forever. Reset it to "error" on every SW startup so the
+   popup never shows a permanent "Syncing…" spinner. */
+(async function recoverStaleSyncing() {
+  var status = await storageGet("new-tab-sync-status");
+  if (status === "syncing") {
+    await storageSet({
+      "new-tab-sync-status": "error",
+      "new-tab-sync-error": "Sync was interrupted (service worker restarted)"
+    });
+  }
+}());
 
 /* ── Alarm listener (safety net for killed SW) ── */
 
