@@ -492,7 +492,12 @@
         /* "Delete here": delegate to background, which suppresses auto-upload.
            Await the response so we know the write is done before reloading. */
         await new Promise(function (resolve) {
-          chrome.runtime.sendMessage({ action: "deleteProfileLocal", id: id }, resolve);
+          chrome.runtime.sendMessage({ action: "deleteProfileLocal", id: id }, function (response) {
+            if (chrome.runtime.lastError) {
+              console.error("deleteProfileLocal:", chrome.runtime.lastError.message);
+            }
+            resolve(response);
+          });
         });
       }
       state.bundle = await loadBundle();
