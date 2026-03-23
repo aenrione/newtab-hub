@@ -150,6 +150,15 @@ EditorKeyboard.prototype._onKey = function (e) {
   if (this.mode === "list") {
     // If user has focused a header field, let Tab/Enter work naturally
     if (this._isHeaderFieldActive()) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        document.activeElement.blur();
+        if (this.items.length) {
+          this.activeItemIndex = 0;
+          this._focusItem(0);
+        }
+        return;
+      }
       if (e.key === "Tab" && !e.shiftKey) {
         // Tab from last header field → first item
         var headerFields = this.headerFields;
@@ -249,6 +258,7 @@ EditorKeyboard.prototype._onKey = function (e) {
     // n → add new
     if (e.key === "n" && !this._isTyping()) {
       e.preventDefault();
+      this.activeItemIndex = this.items.length; // will clamp to new last item after rebuild
       var addBtn = this._getAddBtn();
       if (addBtn) addBtn.click();
       return;

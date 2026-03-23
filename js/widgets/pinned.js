@@ -97,6 +97,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
     var card = document.createElement("div");
     card.className = "editor-card";
     card.dataset.navItem = "";                                 // ← NEW
+    card.tabIndex = -1;   // makes card focusable so item.focus() works
     card.draggable = true;
     card.dataset.index = index;
 
