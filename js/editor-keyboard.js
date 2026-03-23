@@ -127,6 +127,7 @@ EditorKeyboard.prototype._onKey = function (e) {
 
   // FLAT mode: only handle ⌘Enter (above) and Tab cycle
   if (this.mode === "flat") {
+    if (e.key === "Escape") { e.preventDefault(); this._closeModal(); return; }
     this._handleFlatTab(e);
     return;
   }
@@ -152,11 +153,7 @@ EditorKeyboard.prototype._onKey = function (e) {
     if (this._isHeaderFieldActive()) {
       if (e.key === "Escape") {
         e.preventDefault();
-        document.activeElement.blur();
-        if (this.items.length) {
-          this.activeItemIndex = 0;
-          this._focusItem(0);
-        }
+        this._closeModal();
         return;
       }
       if (e.key === "Tab" && !e.shiftKey) {
@@ -182,14 +179,10 @@ EditorKeyboard.prototype._onKey = function (e) {
       return;
     }
 
-    // Esc with no focused item → close (let grid.js close button handle it)
+    // Esc → close modal
     if (e.key === "Escape") {
-      if (this.activeItemIndex < 0) return; // let bubble to overlay click handler
       e.preventDefault();
-      // Defocus the item and clear focus
-      this.items.forEach(function (el) { el.classList.remove("editor-nav-focused"); });
-      this._clearHints();
-      this.activeItemIndex = -1;
+      this._closeModal();
       return;
     }
 
@@ -340,4 +333,11 @@ EditorKeyboard.prototype._reorder = function (direction) {
 
   // After rebuild (via onRebuild callback), rescan will restore focus
   this.activeItemIndex = newIdx;
+};
+
+EditorKeyboard.prototype._closeModal = function () {
+  var overlay = this.panel.parentElement;
+  if (!overlay) return;
+  var closeBtn = overlay.querySelector(".modal-close");
+  if (closeBtn) closeBtn.click();
 };
