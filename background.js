@@ -322,6 +322,25 @@ async function doAutoDownload() {
 /* ── Message listener (from popup and newtab page) ── */
 
 chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
+  if (msg.action === "deleteProfileLocal") {
+    /* Async handler — must return true to keep message channel open until
+       sendResponse is called. The response signals main.js the write is done. */
+    (async function () {
+      /* Clear any pending upload so a queued alarm cannot push this deletion to remote */
+      await storageSet({ "new-tab-sync-pending": false });
+      if (debounceTimer !== null) { clearTimeout(debounceTimer); debounceTimer = null; }
+
+      isSuppressingUpload = true;
+      var profiles = (await storageGet("new-tab-profiles")) || {};
+      delete profiles[msg.id];
+      await storageSet({ "new-tab-profiles": profiles });
+      setTimeout(function () { isSuppressingUpload = false; }, 0);
+
+      sendResponse({ received: true });
+    }()).catch(console.error);
+    return true; /* keep channel open for async sendResponse */
+  }
+
   sendResponse({ received: true });
   if (msg.action === "syncUpload") {
     doUpload(true).catch(console.error);
