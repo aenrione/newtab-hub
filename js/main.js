@@ -601,6 +601,35 @@
   function bindLayoutButton() {
     var btn = document.getElementById("layout-edit-toggle");
     var savedOverrides = null; /* snapshot for cancel */
+    var initialEditHash = null; /* djb2 hash of initial state for dirty detection */
+
+    function hashString(str) {
+      var hash = 5381;
+      for (var i = 0; i < str.length; i++) {
+        hash = (((hash << 5) + hash) ^ str.charCodeAt(i)) | 0;
+      }
+      return hash;
+    }
+
+    function editStateHash() {
+      var clone = Hub.grid.getEditClone();
+      if (!clone) return null;
+      var gridEl = document.getElementById("dashboard-grid");
+      var domLayout = Hub.grid.readLayoutFromDOM(gridEl);
+      var posById = {};
+      domLayout.forEach(function (l) { posById[l.widget] = l; });
+      var state = clone.map(function (w) {
+        var p = posById[w.id] || {};
+        return { id: w.id, col: p.col || w.col, row: p.row || w.row,
+                 width: p.width || w.width, height: p.height || w.height,
+                 config: w.config };
+      });
+      return hashString(JSON.stringify(state));
+    }
+
+    function isLayoutDirty() {
+      return initialEditHash !== null && editStateHash() !== initialEditHash;
+    }
 
     async function saveLayout() {
       var gridEl = document.getElementById("dashboard-grid");
@@ -613,6 +642,7 @@
       if (editExitFn) editExitFn();
       editExitFn = null;
       savedOverrides = null;
+      initialEditHash = null;
 
       if (clone) {
         newLayout.forEach(function (l) {
@@ -627,6 +657,8 @@
     }
 
     async function cancelLayout() {
+      if (isLayoutDirty() && !window.confirm("Discard unsaved changes?")) return;
+      initialEditHash = null;
       if (editExitFn) editExitFn();
       editExitFn = null;
       /* Restore original overrides (undo any temporary writes from onWidgetAdded) */
@@ -700,6 +732,7 @@
       var widgets = resolvedWidgets();
       Hub.grid.setEditClone(widgets);
       editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave);
+      initialEditHash = editStateHash();
     }
 
     btn.addEventListener("click", function () {

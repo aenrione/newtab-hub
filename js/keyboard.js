@@ -42,9 +42,14 @@ Hub.keyboard = (function () {
     nodes.forEach(function (n) { n.classList.remove("focus-ring"); });
     if (index < 0 || index >= nodes.length) { focusIndex = -1; return; }
     focusIndex = index;
-    nodes[index].classList.add("focus-ring");
-    nodes[index].focus({ preventScroll: true });
-    nodes[index].scrollIntoView({ block: "nearest", inline: "nearest" });
+    var node = nodes[index];
+    node.classList.add("focus-ring");
+    /* Don't auto-focus inputs/textareas — just highlight so hjkl can keep moving.
+       User presses Enter to manually activate. */
+    if (node.tagName !== "INPUT" && node.tagName !== "TEXTAREA") {
+      node.focus({ preventScroll: true });
+    }
+    node.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   function navigate(direction) {
@@ -74,6 +79,10 @@ Hub.keyboard = (function () {
      Excludes keys already bound: h j k l d u z e p t */
   var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
   var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1, a:1 };
+
+  /* Home-row letters for selecting items within an active chord.
+     a=1st item, s=2nd, d=3rd … up to 9 items. */
+  var CHORD_ITEM_KEYS = ["a","s","d","f","g","h","j","k","l"];
 
   var chordState = { active: false, container: null, key: null, timer: null };
   var widgetKeyMap = {}; /* letter → { widgetEl, container, title } */
@@ -190,20 +199,17 @@ Hub.keyboard = (function () {
       entry.container.open = true;
     }
 
-    /* Show numbered indices on focusable items (include inputs for todo) */
+    /* Show home-row letter indices on all focusable items (inputs included) */
     var items = getContainerFocusables(entry.container, chordState.isTodo);
     items.forEach(function (item, i) {
-      if (i >= 9) return;
+      if (i >= CHORD_ITEM_KEYS.length) return;
       var idx = document.createElement("span");
       idx.className = "chord-index";
-      /* For todo widget, input gets "0" badge, items get 1-9 */
-      if (chordState.isTodo && (item.tagName === "INPUT" || item.tagName === "TEXTAREA")) {
-        idx.textContent = "0";
+      idx.textContent = CHORD_ITEM_KEYS[i];
+      if (item.tagName === "INPUT" || item.tagName === "TEXTAREA") {
         idx.classList.add("chord-index-input");
         item.parentNode.insertBefore(idx, item.nextSibling);
       } else {
-        idx.textContent = i + 1 - (chordState.isTodo ? 1 : 0);
-        if (idx.textContent === "0") { idx.remove(); return; }
         item.appendChild(idx);
       }
     });
@@ -218,30 +224,12 @@ Hub.keyboard = (function () {
     if (!entry) { clearChord(); return false; }
 
     var items = getContainerFocusables(entry.container, chordState.isTodo);
-
-    if (chordState.isTodo) {
-      /* 0 focuses the todo input */
-      if (num === 0) {
-        var input = items.find(function (el) { return el.tagName === "INPUT" || el.tagName === "TEXTAREA"; });
-        if (input) input.focus();
-        clearChord();
-        return true;
-      }
-      /* For numbered items, skip the input element */
-      var nonInputs = items.filter(function (el) { return el.tagName !== "INPUT" && el.tagName !== "TEXTAREA"; });
-      var idx = num - 1;
-      if (idx >= 0 && idx < nonInputs.length) {
-        var el = nonInputs[idx];
-        if (el.href) Hub.openItem(el.href, metaKey);
-        else el.click();
-      }
-    } else {
-      var idx = num - 1;
-      if (idx >= 0 && idx < items.length) {
-        var el = items[idx];
-        if (el.href) Hub.openItem(el.href, metaKey);
-        else el.click();
-      }
+    var idx = num - 1;
+    if (idx >= 0 && idx < items.length) {
+      var el = items[idx];
+      if (el.href) Hub.openItem(el.href, metaKey);
+      else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") el.focus();
+      else el.click();
     }
     clearChord();
     return true;
@@ -329,16 +317,35 @@ Hub.keyboard = (function () {
         if (Hub.grid.handleEditKey(e)) return;
       }
 
-      /* Chord mode: number or escape while chord is active */
+      /* Chord mode: item selection or escape while chord is active */
       if (!typing && chordState.active) {
         if (key === "escape") { e.preventDefault(); clearChord(); return; }
+
+        /* Number keys (legacy + todo input via 0) */
         if (/^[0-9]$/.test(e.key)) {
           e.preventDefault();
           handleChordNumber(Number(e.key), e.metaKey || e.ctrlKey);
           return;
         }
-        /* Any other key cancels chord and falls through */
-        clearChord();
+
+        /* Home-row letter keys: a=1, s=2, d=3 … */
+        var chordLetterIdx = CHORD_ITEM_KEYS.indexOf(key);
+        if (chordLetterIdx !== -1) {
+          e.preventDefault();
+          handleChordNumber(chordLetterIdx + 1, e.metaKey || e.ctrlKey);
+          return;
+        }
+
+        /* Another widget chord key → switch to that chord */
+        if (!e.metaKey && !e.ctrlKey && !e.altKey && widgetKeyMap[key]) {
+          clearChord();
+          /* fall through to chord activation below */
+        } else {
+          /* Suppress everything else — no bleed-through while chord is active */
+          e.preventDefault();
+          clearChord();
+          return;
+        }
       }
 
       if (!typing && !e.metaKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
@@ -366,7 +373,9 @@ Hub.keyboard = (function () {
       if (key === "enter") {
         var nodes = focusables();
         var active = nodes[focusIndex];
-        if (active && active.href) { e.preventDefault(); Hub.openItem(active.href, e.metaKey || e.ctrlKey); }
+        if (!active) return;
+        if (active.href) { e.preventDefault(); Hub.openItem(active.href, e.metaKey || e.ctrlKey); }
+        else if (active.tagName === "INPUT" || active.tagName === "TEXTAREA") { e.preventDefault(); active.focus(); }
       }
     });
   }
