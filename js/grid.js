@@ -238,9 +238,10 @@ Hub.grid = (function () {
 
     var body = document.createElement("div");
     body.className = "config-modal-body";
+    var editorKeyboard = new EditorKeyboard(panel);
     plugin.renderEditor(body, w.config || {}, function (newConfig) {
       w.config = newConfig;
-    });
+    }, { onRebuild: function () { editorKeyboard.rescan(); } });
 
     var actions = document.createElement("div");
     actions.className = "config-modal-actions";
@@ -248,6 +249,7 @@ Hub.grid = (function () {
     doneBtn.className = "toolbar-button";
     doneBtn.type = "button";
     doneBtn.textContent = "Done";
+    doneBtn.dataset.navSave = "";
     actions.appendChild(doneBtn);
 
     panel.appendChild(header);
@@ -257,7 +259,7 @@ Hub.grid = (function () {
     document.body.appendChild(overlay);
 
     function close() {
-      document.removeEventListener("keydown", onConfigKey);
+      editorKeyboard.detach();
       overlay.remove();
       if (onSave) onSave(widgetId);
     }
@@ -265,53 +267,7 @@ Hub.grid = (function () {
     doneBtn.addEventListener("click", close);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
 
-    /* Keyboard navigation for config modal */
-    function getFocusableElements() {
-      return Array.from(panel.querySelectorAll('input, select, textarea, button:not(.modal-close), [tabindex]:not([tabindex="-1"])'))
-        .filter(function (el) { return el.offsetParent !== null; });
-    }
-
-    function onConfigKey(e) {
-      if (e.key === "Escape") { e.preventDefault(); close(); return; }
-
-      /* Enter on Done button or when not in textarea */
-      if (e.key === "Enter" && document.activeElement !== doneBtn && document.activeElement.tagName !== "TEXTAREA") {
-        /* If in an input, move to next input; if last input, close */
-        var focusable = getFocusableElements();
-        var idx = focusable.indexOf(document.activeElement);
-        if (idx >= 0 && idx < focusable.length - 1) {
-          e.preventDefault();
-          focusable[idx + 1].focus();
-        } else {
-          e.preventDefault();
-          close();
-        }
-        return;
-      }
-
-      /* Tab trap: keep focus within modal */
-      if (e.key === "Tab") {
-        var focusable = getFocusableElements();
-        if (!focusable.length) return;
-        var first = focusable[0];
-        var last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    }
-    document.addEventListener("keydown", onConfigKey);
-
-    /* Auto-focus first input */
-    requestAnimationFrame(function () {
-      var firstInput = panel.querySelector("input, select, textarea");
-      if (firstInput) firstInput.focus();
-      else doneBtn.focus();
-    });
+    requestAnimationFrame(function () { editorKeyboard.attach(); });
   }
 
   function openAddWidgetModal(gridEl, onAdded) {
@@ -478,13 +434,39 @@ Hub.grid = (function () {
   /* ── Edit mode keyboard controls ── */
 
   var editFocusedWidget = null; /* currently keyboard-focused widget element */
+  var editGrabbed = false;      /* whether the focused widget is "grabbed" for move/resize */
+
+  function setEditGrab(grabbed) {
+    editGrabbed = grabbed;
+    if (editFocusedWidget) {
+      editFocusedWidget.classList.toggle("edit-focus", !grabbed);
+      editFocusedWidget.classList.toggle("widget-grabbed", grabbed);
+    }
+  }
+
+  /* Spatial scoring for focus navigation (mirrors keyboard.js score logic) */
+  function scoreEditDir(cur, rect, dir) {
+    var cx = cur.left + cur.width / 2, cy = cur.top + cur.height / 2;
+    var tx = rect.left + rect.width / 2, ty = rect.top + rect.height / 2;
+    var ox = Math.max(0, Math.min(cur.right, rect.right) - Math.max(cur.left, rect.left));
+    var oy = Math.max(0, Math.min(cur.bottom, rect.bottom) - Math.max(cur.top, rect.top));
+    if (dir === "right") { if (tx <= cx + 4) return null; return (oy > 0 ? 0 : 10000) + Math.max(0, rect.left - cur.right) * 12 + Math.abs(ty - cy); }
+    if (dir === "left")  { if (tx >= cx - 4) return null; return (oy > 0 ? 0 : 10000) + Math.max(0, cur.left - rect.right) * 12 + Math.abs(ty - cy); }
+    if (dir === "down")  { if (ty <= cy + 4) return null; return (ox > 0 ? 0 : 10000) + Math.max(0, rect.top - cur.bottom) * 12 + Math.abs(tx - cx); }
+    if (dir === "up")    { if (ty >= cy - 4) return null; return (ox > 0 ? 0 : 10000) + Math.max(0, cur.top - rect.bottom) * 12 + Math.abs(tx - cx); }
+    return null;
+  }
 
   function getEditableWidgets(gridEl) {
     return Array.from(gridEl.querySelectorAll(".widget.widget-editable"));
   }
 
   function setEditFocus(el) {
-    if (editFocusedWidget) editFocusedWidget.classList.remove("edit-focus");
+    if (editFocusedWidget) {
+      editFocusedWidget.classList.remove("edit-focus");
+      editFocusedWidget.classList.remove("widget-grabbed");
+    }
+    editGrabbed = false;
     editFocusedWidget = el;
     if (el) {
       el.classList.add("edit-focus");
@@ -493,12 +475,28 @@ Hub.grid = (function () {
   }
 
   function handleEditKey(e) {
-    var key = e.key;
     var gridEl = document.getElementById("dashboard-grid");
     if (!gridEl || !editing) return false;
 
+    /* When grabbed: hjkl/HJKL all map to arrows (move + resize).
+       When not grabbed: only HJKL map (shift+resize); lowercase hjkl = focus nav below. */
+    var VIM_MAP = editGrabbed
+      ? { h: "ArrowLeft", j: "ArrowDown", k: "ArrowUp", l: "ArrowRight",
+          H: "ArrowLeft", J: "ArrowDown", K: "ArrowUp", L: "ArrowRight" }
+      : { H: "ArrowLeft", J: "ArrowDown", K: "ArrowUp", L: "ArrowRight" };
+    var key = VIM_MAP[e.key] ? VIM_MAP[e.key] : e.key;
+    var shiftKey = e.shiftKey || (e.key in VIM_MAP && e.key === e.key.toUpperCase() && e.key !== e.key.toLowerCase());
+
     var widgets = getEditableWidgets(gridEl);
     if (!widgets.length) return false;
+
+    /* Esc while grabbed → release grab (stay in edit mode) */
+    if (e.key === "Escape" && editGrabbed) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setEditGrab(false);
+      return true;
+    }
 
     /* Tab / Shift+Tab: cycle through widgets */
     if (key === "Tab") {
@@ -533,7 +531,31 @@ Hub.grid = (function () {
       }
     }
 
+    /* hjkl (not grabbed): spatially navigate focus between widgets */
+    var HJKL_DIR = { h: "left", j: "down", k: "up", l: "right" };
+    if (!editGrabbed && HJKL_DIR[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      if (!editFocusedWidget) { setEditFocus(widgets[0]); return true; }
+      var dir = HJKL_DIR[e.key];
+      var cur = editFocusedWidget.getBoundingClientRect();
+      var best = null;
+      widgets.forEach(function (ww) {
+        if (ww === editFocusedWidget) return;
+        var s = scoreEditDir(cur, ww.getBoundingClientRect(), dir);
+        if (s !== null && (!best || s < best.score)) best = { el: ww, score: s };
+      });
+      if (best) setEditFocus(best.el);
+      return true;
+    }
+
     if (!editFocusedWidget) return false;
+
+    /* Enter / Space: toggle grab on focused widget */
+    if ((key === "Enter" || key === " ") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      setEditGrab(!editGrabbed);
+      return true;
+    }
 
     var w = editFocusedWidget;
     var col = parseInt(w.dataset.gridCol);
@@ -545,7 +567,7 @@ Hub.grid = (function () {
     if (key === "ArrowRight" || key === "ArrowLeft" || key === "ArrowDown" || key === "ArrowUp") {
       e.preventDefault();
 
-      if (e.shiftKey) {
+      if (shiftKey) {
         /* Resize */
         if (key === "ArrowRight") width = Math.min(COLS - col + 1, width + 1);
         else if (key === "ArrowLeft") width = Math.max(1, width - 1);
@@ -778,6 +800,7 @@ Hub.grid = (function () {
     return function exitEditMode() {
       document.removeEventListener("keydown", onEditEscape);
       editing = false;
+      editGrabbed = false;
       setEditFocus(null);
       gridEl.classList.remove("grid-editing");
       document.removeEventListener("mousemove", onMouseMove);
