@@ -1121,6 +1121,52 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .profile-dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
 .profile-dropdown-item.is-danger { color: var(--down); }
 .profile-dropdown-item.is-danger:hover { background: rgba(248,113,113,0.1); }
+.profile-dropdown-row { display: flex; align-items: center; }
+.profile-dropdown-row .profile-dropdown-item { flex: 1; width: auto; }
+.profile-dropdown-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.profile-dropdown-row:hover .profile-dropdown-delete { opacity: 1; }
+.profile-dropdown-delete:hover { color: var(--down); background: rgba(248,113,113,0.1); }
+.profile-dropdown-confirm {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.profile-dropdown-confirm-msg {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.profile-dropdown-confirm-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.profile-dropdown-confirm-btn {
+  flex: 1;
+  padding: 4px 8px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.profile-dropdown-confirm-btn:hover { background: var(--surface-hover); }
+.profile-dropdown-confirm-btn.is-danger { color: var(--down); border-color: var(--down); }
+.profile-dropdown-confirm-btn.is-danger:hover { background: rgba(248,113,113,0.1); }
 
 /* ── Widget edit controls (visible in edit mode) ── */
 .widget-edit-controls {

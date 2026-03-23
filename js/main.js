@@ -433,6 +433,69 @@
       return wrapper;
     }
 
+    function buildDeleteConfirm(id, label, syncEnabled) {
+      var panel = document.createElement("div");
+      panel.className = "profile-dropdown-confirm";
+
+      var msg = document.createElement("span");
+      msg.className = "profile-dropdown-confirm-msg";
+      msg.textContent = "Remove \u201c" + label + "\u201d?";
+      panel.appendChild(msg);
+
+      var actions = document.createElement("div");
+      actions.className = "profile-dropdown-confirm-actions";
+
+      var cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "profile-dropdown-confirm-btn";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", function (e) { e.stopPropagation(); renderDropdown(); });
+
+      var localBtn = document.createElement("button");
+      localBtn.type = "button";
+      localBtn.className = "profile-dropdown-confirm-btn is-danger";
+      localBtn.textContent = "Delete here";
+      localBtn.addEventListener("click", async function (e) {
+        e.stopPropagation();
+        await doDeleteProfile(id, false);
+      });
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(localBtn);
+
+      if (syncEnabled) {
+        var allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "profile-dropdown-confirm-btn is-danger";
+        allBtn.textContent = "Delete everywhere";
+        allBtn.addEventListener("click", async function (e) {
+          e.stopPropagation();
+          await doDeleteProfile(id, true);
+        });
+        actions.appendChild(allBtn);
+      }
+
+      panel.appendChild(actions);
+      return panel;
+    }
+
+    async function doDeleteProfile(id, uploadAfter) {
+      var stored = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
+      delete stored[id];
+      await state.store.set(Hub.STORAGE_PROFILES_KEY, stored);
+      state.bundle = await loadBundle();
+      if (uploadAfter && typeof chrome !== "undefined" && chrome.runtime) {
+        chrome.runtime.sendMessage({ action: "syncUpload" });
+      }
+      if (state.activeProfile === id) {
+        await state.store.set(Hub.STORAGE_KEY, state.bundle.defaultProfile);
+        dropdown.classList.remove("is-open");
+        await renderDashboard(state.bundle.defaultProfile);
+      } else {
+        renderDropdown();
+      }
+    }
+
     function renderDropdown() {
       dropdown.replaceChildren();
       var profiles = state.bundle ? state.bundle.profiles : {};
@@ -459,20 +522,11 @@
           delBtn.className = "profile-dropdown-delete";
           delBtn.type = "button";
           delBtn.title = "Remove profile";
-          delBtn.textContent = "×";
+          delBtn.innerHTML = "&#x2715;";
           delBtn.addEventListener("click", async function (e) {
             e.stopPropagation();
-            var stored = (await state.store.get(Hub.STORAGE_PROFILES_KEY)) || {};
-            delete stored[name];
-            await state.store.set(Hub.STORAGE_PROFILES_KEY, stored);
-            state.bundle = await loadBundle();
-            if (state.activeProfile === name) {
-              await state.store.set(Hub.STORAGE_KEY, state.bundle.defaultProfile);
-              dropdown.classList.remove("is-open");
-              await renderDashboard(state.bundle.defaultProfile);
-            } else {
-              renderDropdown();
-            }
+            var syncEnabled = !!(await state.store.get("new-tab-webdav-url"));
+            row.replaceWith(buildDeleteConfirm(name, profiles[name].label || name, syncEnabled));
           });
           row.appendChild(delBtn);
         }
