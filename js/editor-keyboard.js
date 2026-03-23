@@ -33,13 +33,9 @@ EditorKeyboard.prototype.rescan = function () {
       this.activeItemIndex = Math.min(this.activeItemIndex, this.items.length - 1);
       this._focusItem(this.activeItemIndex);
     } else {
-      // First open: focus first header field if present, else first item
-      if (this.headerFields.length > 0) {
-        this.headerFields[0].focus();
-      } else {
-        this.activeItemIndex = 0;
-        this._focusItem(0);
-      }
+      // First open: always start on first list item so j/k works immediately
+      this.activeItemIndex = 0;
+      this._focusItem(0);
     }
   } else {
     this.mode = "flat";
