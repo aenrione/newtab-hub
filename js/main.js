@@ -655,8 +655,12 @@
         if (area !== "local") return;
         if (!changes["new-tab-sync-last"]) return;
         if (Hub.grid.isEditing()) return;
+        state.bundle = await loadBundle();
         state.profileOverrides = (await state.store.get(Hub.STORAGE_OVERRIDES_KEY)) || {};
-        await renderDashboard(state.activeProfile);
+        var activeProfile = state.bundle.profiles[state.activeProfile]
+          ? state.activeProfile
+          : state.bundle.defaultProfile;
+        await renderDashboard(activeProfile);
       });
     }
 
