@@ -153,7 +153,11 @@ EditorKeyboard.prototype._onKey = function (e) {
     if (this._isHeaderFieldActive()) {
       if (e.key === "Escape") {
         e.preventDefault();
-        this._closeModal();
+        document.activeElement.blur();
+        if (this.items.length) {
+          this.activeItemIndex = 0;
+          this._focusItem(0);
+        }
         return;
       }
       if (e.key === "Tab" && !e.shiftKey) {
