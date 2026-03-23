@@ -117,6 +117,10 @@ async function doUpload(isManual) {
 /* ── Core download ── */
 
 async function doDownload() {
+  /* Clear pending flag to prevent a debounced upload from overwriting data
+     we're about to download from the server. */
+  await storageSet({ "new-tab-sync-pending": false });
+
   var url = await storageGet("new-tab-webdav-url");
   var username = await storageGet("new-tab-webdav-username");
   var password = await storageGet("new-tab-webdav-password");
@@ -207,7 +211,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
      is the only case where we can be sure the user just finished setup. */
   var urlChange = changes["new-tab-webdav-url"];
   if (urlChange && !urlChange.oldValue && urlChange.newValue) {
-    doUpload(true);
+    doUpload(true).catch(console.error);
     return;
   }
 
@@ -215,7 +219,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
      Does NOT trigger an upload — the next dashboard edit will. */
   var credKeys = ["new-tab-webdav-url", "new-tab-webdav-username", "new-tab-webdav-password"];
   if (credKeys.some(function (k) { return changes[k]; })) {
-    storageSet({ "new-tab-sync-auth-failed": false });
+    storageSet({ "new-tab-sync-auth-failed": false }).catch(console.error);
     return;
   }
 
@@ -225,7 +229,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
   });
   if (!relevant) return;
 
-  scheduleUpload();
+  scheduleUpload().catch(console.error);
 });
 
 /* ── Alarm listener (safety net for killed SW) ── */
@@ -247,9 +251,9 @@ chrome.alarms.onAlarm.addListener(async function (alarm) {
 chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   sendResponse({ received: true });
   if (msg.action === "syncUpload") {
-    doUpload(true);
+    doUpload(true).catch(console.error);
   } else if (msg.action === "syncDownload") {
-    doDownload();
+    doDownload().catch(console.error);
   }
   return false; /* sendResponse already called synchronously */
 });
