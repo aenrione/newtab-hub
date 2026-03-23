@@ -87,7 +87,7 @@ EditorKeyboard.prototype._renderHints = function (item, mode) {
   hintsEl.className = "editor-nav-hints";
 
   var hints = mode === "list"
-    ? ["↑↓ navigate", "↵ edit", "⇧↑↓ reorder", "⌫ delete", "n add"]
+    ? ["↑↓ navigate", "↵ edit", "⇧↑↓ reorder", "⌫/d delete", "a/n add"]
     : ["Tab fields", "Esc back"];
 
   hints.forEach(function (text) {
@@ -117,7 +117,10 @@ EditorKeyboard.prototype._highlightHeader = function (index) {
   if (index < 0 || index >= this.headerFields.length) return;
   this.activeHeaderIndex = index;
   var label = this.headerFields[index].parentElement;
-  if (label) label.classList.add("editor-nav-focused");
+  if (label) {
+    label.classList.add("editor-nav-focused");
+    label.scrollIntoView({ block: "nearest" });
+  }
 };
 
 EditorKeyboard.prototype._unhighlightHeaders = function () {
@@ -284,7 +287,7 @@ EditorKeyboard.prototype._onKey = function (e) {
     }
 
     // Backspace / x → delete
-    if ((e.key === "Backspace" || e.key === "x") && !this._isTyping()) {
+    if ((e.key === "Backspace" || e.key === "x" || e.key === "d") && !this._isTyping()) {
       if (this.activeItemIndex < 0) return;
       e.preventDefault();
       var removeBtn = this.items[this.activeItemIndex].querySelector(".editor-remove");
@@ -293,7 +296,7 @@ EditorKeyboard.prototype._onKey = function (e) {
     }
 
     // n → add new
-    if (e.key === "n" && !this._isTyping()) {
+    if ((e.key === "n" || e.key === "a") && !this._isTyping()) {
       e.preventDefault();
       this.activeItemIndex = this.items.length; // will clamp to new last item after rebuild
       var addBtn = this._getAddBtn();
