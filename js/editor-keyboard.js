@@ -5,6 +5,7 @@ window.EditorKeyboard = function EditorKeyboard(panel) {
   this.mode = "flat";        // "list" | "item" | "flat"
   this.activeItemIndex = -1;
   this.activeFieldIndex = -1;
+  this.activeHeaderIndex = -1;  // which header label is highlighted (-1 = none)
   this.items = [];           // [data-nav-item] elements
   this.headerFields = [];    // [data-nav-header-field] elements
   this._handler = this._onKey.bind(this);
@@ -33,9 +34,14 @@ EditorKeyboard.prototype.rescan = function () {
       this.activeItemIndex = Math.min(this.activeItemIndex, this.items.length - 1);
       this._focusItem(this.activeItemIndex);
     } else {
-      // First open: always start on first list item so j/k works immediately
-      this.activeItemIndex = 0;
-      this._focusItem(0);
+      // First open: highlight header if present, else focus first item
+      if (this.headerFields.length > 0) {
+        this.activeItemIndex = -1;
+        this._highlightHeader(0);
+      } else {
+        this.activeItemIndex = 0;
+        this._focusItem(0);
+      }
     }
   } else {
     this.mode = "flat";
@@ -46,6 +52,7 @@ EditorKeyboard.prototype.rescan = function () {
 };
 
 EditorKeyboard.prototype._focusItem = function (index) {
+  this._unhighlightHeaders();     // clear header highlight
   var items = this.items;
   if (!items.length) return;
   // Remove focused class from all items
@@ -105,6 +112,22 @@ EditorKeyboard.prototype._getAddBtn = function () {
   return this.panel.querySelector("[data-nav-add]");
 };
 
+EditorKeyboard.prototype._highlightHeader = function (index) {
+  this._unhighlightHeaders();
+  if (index < 0 || index >= this.headerFields.length) return;
+  this.activeHeaderIndex = index;
+  var label = this.headerFields[index].parentElement;
+  if (label) label.classList.add("editor-nav-focused");
+};
+
+EditorKeyboard.prototype._unhighlightHeaders = function () {
+  this.headerFields.forEach(function (f) {
+    var label = f.parentElement;
+    if (label) label.classList.remove("editor-nav-focused");
+  });
+  this.activeHeaderIndex = -1;
+};
+
 EditorKeyboard.prototype._isTyping = function () {
   var tag = document.activeElement && document.activeElement.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
@@ -145,15 +168,34 @@ EditorKeyboard.prototype._onKey = function (e) {
 
   // LIST mode — only act when focus is not in a text input
   if (this.mode === "list") {
+    // Header highlighted (visual only, not browser-focused)
+    if (this.activeHeaderIndex >= 0 && !this._isHeaderFieldActive()) {
+      if ((e.key === "ArrowDown" || e.key === "j") && !e.shiftKey) {
+        e.preventDefault();
+        this.activeItemIndex = 0;
+        this._focusItem(0);
+        return;
+      }
+      if (e.key === "Enter" || e.key === " " || e.key === "i") {
+        e.preventDefault();
+        this.headerFields[this.activeHeaderIndex].focus();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this._closeModal();
+        return;
+      }
+      return; // block all other keys while header is highlighted
+    }
+
     // If user has focused a header field, let Tab/Enter work naturally
     if (this._isHeaderFieldActive()) {
       if (e.key === "Escape") {
         e.preventDefault();
+        var prevIdx = this.activeHeaderIndex >= 0 ? this.activeHeaderIndex : 0;
         document.activeElement.blur();
-        if (this.items.length) {
-          this.activeItemIndex = 0;
-          this._focusItem(0);
-        }
+        this._highlightHeader(prevIdx);
         return;
       }
       if (e.key === "Tab" && !e.shiftKey) {
@@ -162,6 +204,7 @@ EditorKeyboard.prototype._onKey = function (e) {
         if (document.activeElement === headerFields[headerFields.length - 1]) {
           e.preventDefault();
           if (this.items.length) {
+            this._unhighlightHeaders();
             this.activeItemIndex = 0;
             this._focusItem(0);
           }
@@ -171,6 +214,7 @@ EditorKeyboard.prototype._onKey = function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
         if (this.items.length) {
+          this._unhighlightHeaders();
           this.activeItemIndex = 0;
           this._focusItem(0);
         }
@@ -204,9 +248,9 @@ EditorKeyboard.prototype._onKey = function (e) {
         // Wrap up to last header field if present
         if (this.headerFields.length) {
           this.items.forEach(function (el) { el.classList.remove("editor-nav-focused"); });
-          this._clearHints();
           this.activeItemIndex = -1;
-          this.headerFields[this.headerFields.length - 1].focus();
+          this._clearHints();
+          this._highlightHeader(this.headerFields.length - 1);
           return;
         }
         this.activeItemIndex = 0;
