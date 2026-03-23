@@ -76,9 +76,9 @@ Hub.keyboard = (function () {
   /* ── Widget chord shortcuts (e.g. "t2" to open item 2 in group T) ── */
 
   /* Ergonomic priority: home row center outward, top row, bottom row.
-     Excludes keys already bound: h j k l d u z e p t */
+     Excludes keys already bound: h j k l d u z e p t y */
   var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
-  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1, a:1 };
+  var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1, a:1, y:1 };
 
   /* Home-row letters for selecting items within an active chord.
      a=1st item, s=2nd, d=3rd … up to 9 items. */
@@ -315,6 +315,17 @@ Hub.keyboard = (function () {
       /* Edit mode keyboard controls: arrow keys move, shift+arrows resize, G config, X/Delete remove */
       if (!typing && Hub.grid.isEditing() && !document.querySelector(".modal-overlay")) {
         if (Hub.grid.handleEditKey(e)) return;
+      }
+
+      /* Y / Shift+Y: pull / push WebDAV sync */
+      if (!typing && key === "y" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (Hub.syncStatus) Hub.syncStatus.confirmPush();
+        } else {
+          if (Hub.syncStatus) Hub.syncStatus.pull();
+        }
+        return;
       }
 
       /* Chord mode: item selection or escape while chord is active */

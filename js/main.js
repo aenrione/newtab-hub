@@ -804,6 +804,7 @@
 
     bindSearch();
     Hub.keyboard.bind(function () { return state; });
+    Hub.syncStatus.init();
     bindProfileSwitcher();
     bindLayoutButton();
 

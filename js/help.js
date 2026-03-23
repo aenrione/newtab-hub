@@ -31,6 +31,8 @@ Hub.help = (function () {
     ["G", "Configure widget (in edit mode)"],
     ["X / Delete", "Remove widget (in edit mode)"],
     ["Ctrl/Cmd + S", "Save layout (in edit mode)", function () { if (Hub.grid.isEditing() && Hub.editMode) Hub.editMode.save(); }],
+    ["Y", "Pull from WebDAV", function () { if (Hub.syncStatus) Hub.syncStatus.pull(); }],
+    ["Shift+Y", "Push to WebDAV", function () { if (Hub.syncStatus) Hub.syncStatus.confirmPush(); }],
     ["?", "Show this help"],
     ["Escape", "Close dialog / cancel edit / blur search"]
   ];
