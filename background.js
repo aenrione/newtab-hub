@@ -169,11 +169,40 @@ async function doDownload() {
     toWrite[k] = downloaded.data[k];
   });
 
-  /* Merge profiles: remote wins for overlapping IDs, local-only profiles are preserved.
-     Sync is additive — profiles are never deleted by a download. */
+  /* Merge profiles: newer _savedAt wins; local-only profiles are preserved.
+     If neither side has a timestamp (legacy data), remote wins. */
   if (toWrite["new-tab-profiles"]) {
     var localProfiles = await storageGet("new-tab-profiles") || {};
-    toWrite["new-tab-profiles"] = Object.assign({}, localProfiles, toWrite["new-tab-profiles"]);
+    var remoteProfiles = toWrite["new-tab-profiles"];
+    var mergedProfiles = Object.assign({}, localProfiles);
+    Object.keys(remoteProfiles).forEach(function (id) {
+      if (!mergedProfiles[id]) {
+        mergedProfiles[id] = remoteProfiles[id];
+      } else {
+        var localTime  = mergedProfiles[id]._savedAt || 0;
+        var remoteTime = remoteProfiles[id]._savedAt || 0;
+        if (remoteTime > localTime) mergedProfiles[id] = remoteProfiles[id];
+      }
+    });
+    toWrite["new-tab-profiles"] = mergedProfiles;
+  }
+
+  /* Merge overrides: same timestamp-based strategy. */
+  var overridesKey = "new-tab-profile-overrides";
+  if (toWrite[overridesKey]) {
+    var localOverrides  = await storageGet(overridesKey) || {};
+    var remoteOverrides = toWrite[overridesKey];
+    var mergedOverrides = Object.assign({}, localOverrides);
+    Object.keys(remoteOverrides).forEach(function (id) {
+      if (!mergedOverrides[id]) {
+        mergedOverrides[id] = remoteOverrides[id];
+      } else {
+        var localOvTime  = mergedOverrides[id]._savedAt || 0;
+        var remoteOvTime = remoteOverrides[id]._savedAt || 0;
+        if (remoteOvTime > localOvTime) mergedOverrides[id] = remoteOverrides[id];
+      }
+    });
+    toWrite[overridesKey] = mergedOverrides;
   }
 
   if (Object.keys(toWrite).length === 0) {

@@ -189,7 +189,7 @@
     var w = widgets.find(function (ww) { return ww.id === widgetId; });
     if (!w) return;
     Object.assign(w.config, patch);
-    state.profileOverrides[state.activeProfile] = { widgets: widgets };
+    state.profileOverrides[state.activeProfile] = { widgets: widgets, _savedAt: Date.now() };
     await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
   };
 
@@ -411,6 +411,7 @@
         var id = uniqueProfileId(profiles, slugify(name));
         profiles[id] = {
           label: name,
+          _savedAt: Date.now(),
           widgets: [
             { id: "search", type: "search", col: 1, row: 1, width: 12, height: 1,
               config: { searchBaseUrl: "https://duckduckgo.com/?q=" } }
@@ -665,7 +666,7 @@
           var w = clone.find(function (ww) { return ww.id === l.widget; });
           if (w) { w.col = l.col; w.row = l.row; w.width = l.width; w.height = l.height; }
         });
-        state.profileOverrides[state.activeProfile] = { widgets: clone };
+        state.profileOverrides[state.activeProfile] = { widgets: clone, _savedAt: Date.now() };
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
       }
 
@@ -694,7 +695,7 @@
       /* Persist config changes immediately when config modal closes */
       var clone = Hub.grid.getEditClone();
       if (clone) {
-        state.profileOverrides[state.activeProfile] = { widgets: clone };
+        state.profileOverrides[state.activeProfile] = { widgets: clone, _savedAt: Date.now() };
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
       }
       /* Preview the updated widget tile while still in edit mode */
