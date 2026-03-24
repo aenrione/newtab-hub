@@ -113,21 +113,41 @@ Hub.syncStatus = (function () {
     var yesBtn = document.createElement("button");
     yesBtn.type = "button";
     yesBtn.className = "sync-toast-btn sync-toast-yes";
-    yesBtn.textContent = "Yes";
+    yesBtn.textContent = "Yes [Enter]";
 
     var noBtn = document.createElement("button");
     noBtn.type = "button";
     noBtn.className = "sync-toast-btn sync-toast-no";
-    noBtn.textContent = "No";
+    noBtn.textContent = "No [Esc]";
 
     toast.appendChild(msg);
     toast.appendChild(yesBtn);
     toast.appendChild(noBtn);
     toastContainer.appendChild(toast);
 
+    /* Trigger reflow then fade in (mirrors showToast) */
+    /* jshint ignore:start */
+    void toast.offsetWidth;
+    /* jshint ignore:end */
+    toast.classList.add("is-visible");
+
     function remove() {
+      document.removeEventListener("keydown", onKey);
       if (toast.parentNode) toast.parentNode.removeChild(toast);
     }
+
+    function onKey(e) {
+      if (e.key === "Enter" || e.key === "y" || e.key === "Y") {
+        e.preventDefault();
+        remove();
+        onConfirm();
+      } else if (e.key === "Escape" || e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        remove();
+      }
+    }
+
+    document.addEventListener("keydown", onKey);
 
     yesBtn.addEventListener("click", function () {
       remove();
