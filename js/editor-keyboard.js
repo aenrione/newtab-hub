@@ -221,16 +221,49 @@ EditorKeyboard.prototype._onKey = function (e) {
 
   // ITEM mode
   if (this.mode === "item") {
-    if (e.key === "Escape") {
+    var activeItem = this.items[this.activeItemIndex];
+    var itemFields = activeItem
+      ? Array.from(activeItem.querySelectorAll("[data-nav-field]")).filter(function (el) {
+          return el.offsetParent !== null;
+        })
+      : [];
+    var activeIsField = itemFields.indexOf(document.activeElement) !== -1;
+
+    if (activeIsField) {
+      // field-active sub-state: field has browser focus, user is typing
+      if (e.key === "Escape") {
+        e.preventDefault();
+        document.activeElement.blur();
+        if (activeItem) activeItem.focus();
+        // stay in item mode, field-nav sub-state (ring + activeFieldIndex unchanged)
+        return;
+      }
+      if (e.key === "Tab") {
+        this._handleItemTab(e);
+        return;
+      }
+      // All other keys: browser delivers to the focused input naturally
+      return;
+    }
+
+    // field-nav sub-state: item container has focus, ring on highlighted field
+    if (e.key === "h" || e.key === "j" || e.key === "k" || e.key === "l") {
+      e.preventDefault();
+      this._moveField(e.key);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      var highlighted = itemFields[this.activeFieldIndex];
+      if (highlighted) highlighted.focus();
+      return;
+    }
+    if (e.key === "Escape" || e.key === "Tab") {
       e.preventDefault();
       this._exitItemMode();
       return;
     }
-    if (e.key === "Tab") {
-      this._handleItemTab(e);
-      return;
-    }
-    // All other keys fall through to normal input handling
+    // All other keys: no-op (item container has focus, nothing to type into)
     return;
   }
 
