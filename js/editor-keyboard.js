@@ -123,6 +123,13 @@ EditorKeyboard.prototype._moveField = function (dir) {
 };
 
 EditorKeyboard.prototype._exitItemMode = function () {
+  // Clear field-nav ring before returning to list mode
+  var item = this.items[this.activeItemIndex];
+  if (item) {
+    item.querySelectorAll(".editor-field-ring").forEach(function (el) {
+      el.classList.remove("editor-field-ring");
+    });
+  }
   this.mode = "list";
   this.activeFieldIndex = -1;
   this._focusItem(this.activeItemIndex);
@@ -135,7 +142,7 @@ EditorKeyboard.prototype._renderHints = function (item, mode) {
 
   var hints = mode === "list"
     ? ["↑↓ navigate", "↵ edit", "⇧↑↓ reorder", "⌫/d delete", "a/n add"]
-    : ["Tab fields", "Esc back"];
+    : ["hjkl fields", "↵ edit", "Esc back"];
 
   hints.forEach(function (text) {
     var span = document.createElement("span");
