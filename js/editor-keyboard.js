@@ -25,6 +25,8 @@ EditorKeyboard.prototype.detach = function () {
 };
 
 EditorKeyboard.prototype._onFocusin = function (e) {
+  // In item mode, focus is managed by _onKey — don't interfere
+  if (this.mode === "item") return;
   // When a header field gains focus (keyboard or mouse), clear any item highlight
   if (this.headerFields.indexOf(e.target) !== -1) {
     this.items.forEach(function (el) { el.classList.remove("editor-nav-focused"); });
