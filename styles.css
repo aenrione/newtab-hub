@@ -649,7 +649,6 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 /* ── Grid editing ── */
 .grid-editing .widget { border-style: dashed; border-color: var(--accent-2); position: relative; z-index: 1; }
 .grid-editing .widget:hover { z-index: 2; }
-.grid-editing .widget-search { border-style: solid; border-color: var(--border); opacity: 0.5; z-index: 0; }
 
 .grid-edit-bar {
   display: flex;

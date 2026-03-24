@@ -24,9 +24,8 @@ Hub.registry = (function () {
 
   function list() { return Object.keys(plugins).map(function (k) { return plugins[k]; }); }
 
-  /** Types available in the "Add widget" picker (excludes search which is always present) */
   function addable() {
-    return list().filter(function (p) { return p.type !== "search"; });
+    return list();
   }
 
   return { register: register, get: get, list: list, addable: addable };
