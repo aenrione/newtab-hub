@@ -9,22 +9,26 @@ newtab-hub widgets currently have no way to store API keys or tokens for authent
 
 ## Goals
 
-- Allow widget authors to declare credential fields as part of their widget registration
+- Provide a simple `Hub.credentials` utility that any widget can call directly
 - Store credentials locally only — never synced via WebDAV, never exported
 - Render credential inputs in the widget editor automatically (masked, with show/hide toggle)
-- Pass credentials to `load()` and `render()` alongside `config`
-- Remain fully backwards compatible — widgets without credentials are unaffected
+- Remain fully backwards compatible — existing widgets are completely unaffected
 - No new dependencies, no build step changes
 
 ## Non-Goals
 
 - OAuth / token refresh flows (future work)
-- A global/shared credential store (per-widget is sufficient for now)
+- Automatic injection of credentials into `load()`/`render()` signatures (widgets grab what they need)
+- A global/shared credential store (per-widget keyed by instance ID)
 - Encrypting credentials beyond what `chrome.storage.local` provides at the OS level
+
+## Design Philosophy
+
+Widgets that need credentials call `Hub.credentials` themselves — the same way they call `Hub.cache` or any other utility. No changes to the `load()` or `render()` call signatures. No changes to `main.js`. The credential system is a tool widget authors opt into, not infrastructure that wraps every widget.
 
 ## Widget Author Contract
 
-Widget authors opt in by adding a `credentialFields` array to their registration:
+Widget authors opt in by adding a `credentialFields` array to their registration and calling `Hub.credentials.load()` in their `load()` function:
 
 ```js
 Hub.registry.register("openai-chat", {
@@ -33,14 +37,20 @@ Hub.registry.register("openai-chat", {
   credentialFields: [
     { key: "apiKey", label: "API Key", placeholder: "sk-..." }
   ],
-  load: async function(container, config, state, token, credentials) {
-    const { apiKey } = credentials;
-    // use apiKey to call OpenAI API
+  load: async function(container, config, state, token) {
+    var creds = await Hub.credentials.load(config._id);
+    if (!creds.apiKey) {
+      container.querySelector(".widget-body").innerHTML =
+        "<p class='widget-empty'>Add your API key in the widget editor.</p>";
+      return;
+    }
+    // use creds.apiKey to fetch data...
   },
-  render: function(container, config, state, credentials) {
-    // credentials available for inline render-time use
+  render: function(container, config, state) {
+    // sync render using data already loaded in load()
   },
   renderEditor: function(container, config, onChange, navOptions) {
+    // model selector, temperature, etc.
     // credential fields are rendered automatically after this by grid.js
   },
   defaultConfig: function() {
@@ -51,15 +61,20 @@ Hub.registry.register("openai-chat", {
 
 - `credentialFields` is optional. Omitting it means the widget behaves exactly as today.
 - Each field: `{ key: string, label: string, placeholder?: string }`
-- `credentials` is the **last argument** on all call signatures — existing widgets that don't declare it simply ignore it.
-- `credentials` is `{}` when no credentials are saved yet.
+- `config._id` is the widget's unique instance ID, automatically available on every widget's config object (see main.js change below).
+- `credentials` resolves to `{}` when no credentials have been saved yet — widget handles this gracefully.
 
-### Updated call signatures
+### `config._id`
 
-- `load(container, config, state, token)` → `load(container, config, state, token, credentials)`
-- `render(container, config, state)` → `render(container, config, state, credentials)`
+The only change to `main.js` is that the widget's instance ID is embedded in its config before being passed to `load()` and `render()`:
 
-Adding `credentials` as the last argument is backwards compatible — existing widgets receive `{}` and ignore it.
+```js
+// In renderDashboard() before plugin.load(...)
+var configWithId = Object.assign({}, w.config || {}, { _id: w.id });
+plugin.load(el, configWithId, state, token);
+```
+
+This gives every widget access to its own instance ID without changing function signatures. `grid.js` uses the same `widgetId` value when saving credentials from the editor UI, so the keys always match.
 
 ## Storage
 
@@ -73,95 +88,87 @@ Credentials are stored in `chrome.storage.local` under a key per widget instance
 - Keys are isolated per widget instance (two OpenAI widgets each have their own key).
 - No credential data ever appears in the profile config or grid layout objects.
 
-## Credential Cache
-
-Because `renderAllWidgets()` and `runHealthChecks()` are synchronous and cannot `await` credential reads, `Hub.credentials` maintains an in-memory cache:
-
-- `Hub.credentials.load(widgetId)` — async, fetches from `chrome.storage.local`, populates cache, resolves `{}` if not set.
-- `Hub.credentials.cached(widgetId)` — synchronous, returns last loaded value from cache, or `{}` if never loaded.
-
-On the initial page render, `renderAllWidgets()` runs before the async load loop in `renderDashboard()`, so all synchronous render call sites will receive `{}` on first paint. This is acceptable: credential-aware widgets must handle `{}` gracefully (e.g., show "Add your API key in the widget editor"). After async loads complete and cache is populated, subsequent renders (health check refreshes, config saves) will have credentials available.
-
 ## Sync & Export/Import Exclusion
 
 `new-tab-creds-*` keys are explicitly excluded at every point where storage data leaves the device:
 
-1. **Upload path** (`background.js` `isPayloadKey()`): extend to return `false` for keys starting with `new-tab-creds-`.
+1. **Upload path** (`background.js` `isPayloadKey()`): add `k.startsWith("new-tab-creds-")` check to return `false`.
 
-2. **Download path** (`background.js` `doDownload()` inline filter): `doDownload` has its own inline key filter separate from `isPayloadKey`. Add `k.startsWith("new-tab-creds-")` to this inline filter to prevent a crafted WebDAV file from overwriting local credentials.
+2. **Download path** (`background.js` `doDownload()` inline filter): add `k.startsWith("new-tab-creds-")` check — prevents a crafted WebDAV file from overwriting local credentials.
 
-3. **Sync trigger** (`background.js` storage change listener): the listener calls `scheduleUpload()` for relevant storage changes. Add a prefix check `k.startsWith("new-tab-creds-")` to the `relevant` predicate (or equivalent early-exit) before the `scheduleUpload()` call, so credential saves never trigger a sync cycle.
+3. **Sync trigger** (`background.js` storage change listener): add `&& !k.startsWith("new-tab-creds-")` to the `relevant` predicate so credential saves do not schedule a sync upload. Note: `SYNC_TRIGGER_SKIP` uses exact-key lookups and cannot match dynamic `new-tab-creds-{id}` keys — the prefix check in the `relevant` predicate is the correct location.
 
-4. **Export handler** (`customize.js`): extend the key filter to exclude keys starting with `new-tab-creds-`.
+4. **Export handler** (`customize.js`): add `k.startsWith("new-tab-creds-")` to the key exclusion filter.
 
-5. **Import handler** (`customize.js`): silently skip any key starting with `new-tab-creds-` found in a backup file.
+5. **Import handler** (`customize.js`): skip any key starting with `new-tab-creds-` found in a backup file.
 
 ## Editor UX
 
-`plugin.renderEditor()` is called from `grid.js` (line ~245). After calling `plugin.renderEditor(body, config, onChange, navOptions)`, `grid.js` checks `plugin.credentialFields`. If present:
+`plugin.renderEditor()` is called from `grid.js` (line ~245). After calling it, `grid.js` checks `plugin.credentialFields`. If present:
 
-1. Append a visually separated "Credentials" section with a lock icon below the widget's editor UI.
-2. Call `Hub.credentials.load(widgetId)` (async, `grid.js` already calls `renderEditor` from an async context) to get existing values.
-3. Render each field as `<input type="password">` with a show/hide toggle. Pre-populate with the saved value if one exists (showing `••••••`); leave empty otherwise.
-4. On blur, call `Hub.credentials.save(widgetId, { [key]: value })` to persist the updated field.
-5. Include a "Remove credentials" button that calls `Hub.credentials.clear(widgetId)` and empties all credential inputs.
+1. Appends a visually separated "Credentials" section below the widget's editor UI.
+2. Calls `Hub.credentials.load(widgetId)` to get existing values.
+3. Renders each field as `<input type="password">` with a show/hide toggle. Pre-populates with the saved value if one exists; leaves empty otherwise.
+4. On blur, calls `Hub.credentials.save(widgetId, { [key]: value })`.
+5. Includes a "Remove credentials" button that calls `Hub.credentials.clear(widgetId)` and empties all inputs.
 
 ## Widget Deletion Cleanup
 
-When a widget is removed from the grid, its `new-tab-creds-{widgetId}` key must be deleted to prevent orphaned storage. `grid.js` already handles widget removal — extend the deletion callback to call `Hub.credentials.clear(widgetId)`.
+When a widget is removed from the grid, `grid.js` calls `Hub.credentials.clear(widgetId)` to delete the orphaned storage key.
 
 ## Infrastructure Changes
 
-### New: `js/credentials.js` (~50 lines)
+### New: `js/credentials.js` (~40 lines)
+
+Uses `chrome.storage.local` directly (not `Hub.store`, which is a per-instance state object not globally accessible):
 
 ```js
 Hub.credentials = {
-  _cache: {},
-  load(widgetId),       // → Promise<object> — fetches from storage, populates cache, resolves {}
-  cached(widgetId),     // → object — synchronous cache read, returns {} if not loaded
+  load(widgetId),       // → Promise<object> — resolves {} if not set
   save(widgetId, obj),  // → Promise — merges obj into stored credentials
-  clear(widgetId)       // → Promise — deletes storage key and clears cache entry
+  clear(widgetId)       // → Promise — removes the storage key
 };
 ```
 
-### Modified: `js/main.js` — 5 call sites
+### Modified: `js/main.js` — one small change
 
-1. **`renderDashboard()` async loop** (line ~289): before `plugin.load(el, config, state, token)`, `await Hub.credentials.load(widgetId)`. Pass result as fifth argument.
-2. **`renderAllWidgets()`** (line ~232): pass `Hub.credentials.cached(widgetId)` as fourth argument to `plugin.render()`. Resolves `{}` on first paint; populated on subsequent renders.
-3. **`runHealthChecks()`** (line ~86): pass `Hub.credentials.cached(widgetId)` as fourth argument to `plugin.render()`.
-4. **`onConfigSave()` render call** (line ~718): pass `Hub.credentials.cached(widgetId)` as fourth argument to `plugin.render()`.
-5. **`onConfigSave()` load call** (line ~722): `onConfigSave` is already `async`. `await Hub.credentials.load(widgetId)`, pass as fifth argument to `plugin.load()`. (Changes existing fire-and-forget to awaited — intentional, ensures load completes before editor re-renders.)
+In the widget render/load paths, embed `_id` in the config object passed to plugins:
+```js
+var configWithId = Object.assign({}, w.config || {}, { _id: w.id });
+```
+Apply this in `renderAllWidgets()` and the async `renderDashboard()` load loop. No signature changes.
 
 ### Modified: `js/grid.js`
 
-- After calling `plugin.renderEditor()`, check `plugin.credentialFields` and inject the credential UI section as described in Editor UX above.
+- After `plugin.renderEditor()`, check `plugin.credentialFields` and inject credential UI.
 - On widget deletion, call `Hub.credentials.clear(widgetId)`.
 
 ### Modified: `js/customize.js`
 
-- **Export:** extend key filter to exclude `new-tab-creds-*`.
-- **Import:** skip `new-tab-creds-*` keys found in backup files.
+- Export: exclude `new-tab-creds-*` keys.
+- Import: skip `new-tab-creds-*` keys.
 
 ### Modified: `background.js`
 
-- Extend `isPayloadKey()` to exclude `new-tab-creds-*` (upload path).
-- Extend `doDownload()` inline key filter to exclude `new-tab-creds-*` (download path).
-- Add prefix check in sync trigger listener to skip `new-tab-creds-*` key changes before calling `scheduleUpload()`.
+- `isPayloadKey()`: exclude `new-tab-creds-*`.
+- `doDownload()` inline filter: exclude `new-tab-creds-*`.
+- Sync trigger listener `relevant` predicate: exclude `new-tab-creds-*`.
 
 ### Modified: `index.html`
 
-Add `<script src="js/credentials.js">` **before** `main.js` and `customize.js`. Script load order is the dependency mechanism in this no-module project.
+Add `<script src="js/credentials.js">` before `grid.js` (which calls `Hub.credentials.clear` on delete and `Hub.credentials.load` in the editor). Since this is a no-module project, load order is the dependency mechanism.
 
 ## Affected Files
 
 | File | Change |
 |------|--------|
-| `js/credentials.js` | **New** — credential storage API with in-memory cache |
-| `js/main.js` | Pass credentials to all 5 `load()`/`render()` call sites |
+| `js/credentials.js` | **New** — `Hub.credentials` utility (load/save/clear) |
+| `js/main.js` | Embed `_id` in config in `renderAllWidgets()` and `renderDashboard()` |
 | `js/grid.js` | Inject credential UI after `renderEditor()`; clear on widget delete |
 | `js/customize.js` | Export/import key filtering |
 | `background.js` | Exclude `new-tab-creds-*` from upload, download, and sync trigger |
-| `index.html` | Add `credentials.js` script before main.js and customize.js |
+| `index.html` | Add `credentials.js` before `grid.js` |
+| `styles.css` | Styles for credential section in widget editor |
 
 ## Example: OpenAI Chat Widget (Future)
 
@@ -169,19 +176,19 @@ Add `<script src="js/credentials.js">` **before** `main.js` and `customize.js`. 
 Hub.registry.register("openai-chat", {
   label: "OpenAI Chat",
   credentialFields: [{ key: "apiKey", label: "API Key", placeholder: "sk-..." }],
-  load: async function(container, config, state, token, credentials) {
-    if (!credentials.apiKey) return { error: "No API key configured" };
-    // fetch from OpenAI...
-  },
-  render: function(container, config, state, credentials) {
-    if (!credentials.apiKey) {
+  load: async function(container, config, state, token) {
+    var creds = await Hub.credentials.load(config._id);
+    if (!creds.apiKey) {
       container.innerHTML = "<p>Add your OpenAI API key in the widget editor.</p>";
       return;
     }
-    // render widget UI...
+    // fetch from OpenAI using creds.apiKey...
+  },
+  render: function(container, config, state) {
+    // uses data already fetched in load()
   },
   renderEditor: function(container, config, onChange, navOptions) {
-    // model selector, temperature, etc. — credential fields added automatically below
+    // model selector, temperature, etc.
   },
   defaultConfig: function() { return { model: "gpt-4o-mini" }; }
 });
