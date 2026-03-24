@@ -89,12 +89,17 @@ EditorKeyboard.prototype._focusItem = function (index) {
 EditorKeyboard.prototype._enterItemMode = function () {
   var item = this.items[this.activeItemIndex];
   if (!item) return;
-  var fields = Array.from(item.querySelectorAll("[data-nav-field]"));
+  var fields = Array.from(item.querySelectorAll("[data-nav-field]")).filter(function (el) {
+    return el.offsetParent !== null;
+  });
   if (!fields.length) return;
   this.mode = "item";
   this.activeFieldIndex = 0;
   this._renderHints(item, "item");
-  fields[0].focus();
+  // Apply visual ring to first field but keep focus on item container for hjkl interception
+  fields[0].classList.add("editor-field-ring");
+  fields[0].scrollIntoView({ block: "nearest" });
+  item.focus();
 };
 
 EditorKeyboard.prototype._exitItemMode = function () {
