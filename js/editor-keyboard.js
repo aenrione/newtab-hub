@@ -102,6 +102,26 @@ EditorKeyboard.prototype._enterItemMode = function () {
   item.focus();
 };
 
+EditorKeyboard.prototype._moveField = function (dir) {
+  var item = this.items[this.activeItemIndex];
+  if (!item) return;
+  var dirMap = { h: "left", l: "right", j: "down", k: "up" };
+  var spatialDir = dirMap[dir];
+  if (!spatialDir) return;
+  var fields = Array.from(item.querySelectorAll("[data-nav-field]")).filter(function (el) {
+    return el.offsetParent !== null;
+  });
+  if (!fields.length) return;
+  var currentField = fields[this.activeFieldIndex];
+  var result = Hub.keyboard.spatialMove(fields, currentField, spatialDir);
+  if (!result) return;
+  // Move ring to result
+  fields.forEach(function (f) { f.classList.remove("editor-field-ring"); });
+  result.classList.add("editor-field-ring");
+  result.scrollIntoView({ block: "nearest" });
+  this.activeFieldIndex = fields.indexOf(result);
+};
+
 EditorKeyboard.prototype._exitItemMode = function () {
   this.mode = "list";
   this.activeFieldIndex = -1;
