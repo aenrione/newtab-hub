@@ -391,6 +391,18 @@ Hub.keyboard = (function () {
     });
   }
 
+  function spatialMove(candidates, currentEl, dir) {
+    if (!currentEl || !candidates.length) return null;
+    var cur = currentEl.getBoundingClientRect();
+    var best = null;
+    candidates.forEach(function (el) {
+      if (el === currentEl) return;
+      var s = score(cur, el.getBoundingClientRect(), dir);
+      if (s != null && (!best || s < best.score)) best = { el: el, score: s };
+    });
+    return best ? best.el : null;
+  }
+
   return {
     bind: bind,
     highlight: highlight,
@@ -400,6 +412,7 @@ Hub.keyboard = (function () {
     clearChord: clearChord,
     getWidgetKeyMap: function () { return widgetKeyMap; },
     ERGO_KEYS: ERGO_KEYS,
-    RESERVED: RESERVED
+    RESERVED: RESERVED,
+    spatialMove: spatialMove
   };
 })();
