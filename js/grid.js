@@ -91,14 +91,17 @@ Hub.grid = (function () {
   }
 
   /* Compact the layout vertically: move each item as high as possible
-     without colliding with any item above it. */
-  function compact(layout) {
+     without colliding with any item above it.
+     Pass pinnedWidget to skip compacting one specific item (e.g. the one
+     the user is actively moving, so explicit downward placement is preserved). */
+  function compact(layout, pinnedWidget) {
     var sorted = layout.slice().sort(function (a, b) {
       return a.row !== b.row ? a.row - b.row : a.col - b.col;
     });
 
     for (var i = 0; i < sorted.length; i++) {
       var item = sorted[i];
+      if (pinnedWidget && item.widget === pinnedWidget) continue;
       while (item.row > 1) {
         var candidate = Object.assign({}, item, { row: item.row - 1 });
         var blocked = false;
@@ -587,7 +590,7 @@ Hub.grid = (function () {
         w.dataset.gridRow = row;
       }
 
-      /* Resolve collisions and compact */
+      /* Resolve collisions and compact (pin the moved widget so downward placement is preserved) */
       var layout = buildLayoutFromGrid(gridEl);
       var movedItem = layout.find(function (it) { return it.widget === w.dataset.gridWidget; });
       if (movedItem) {
@@ -596,7 +599,7 @@ Hub.grid = (function () {
         movedItem.width = width;
         movedItem.height = height;
         resolveCollisions(layout, movedItem);
-        compact(layout);
+        compact(layout, movedItem.widget);
         syncLayoutToDOM(layout);
       } else {
         w.style.gridColumn = col + " / span " + width;
@@ -641,8 +644,6 @@ Hub.grid = (function () {
     showEditBar(onSave, onCancel, gridEl, onAdded);
 
     gridEl.querySelectorAll(".widget").forEach(function (w) {
-      if (w.dataset.widgetType === "search") return;
-
       w.classList.add("widget-editable");
 
       /* Edit controls bar */
@@ -739,14 +740,14 @@ Hub.grid = (function () {
         dragWidget.el.dataset.gridCol = newCol;
         dragWidget.el.dataset.gridRow = newRow;
 
-        /* Build layout, resolve collisions, compact, sync DOM */
+        /* Build layout, resolve collisions, compact (pin dragged widget so downward drag sticks) */
         var layout = buildLayoutFromGrid(gridEl);
         var movedItem = layout.find(function (it) { return it.widget === dragWidget.el.dataset.gridWidget; });
         if (movedItem) {
           movedItem.col = newCol;
           movedItem.row = newRow;
           resolveCollisions(layout, movedItem);
-          compact(layout);
+          compact(layout, movedItem.widget);
           syncLayoutToDOM(layout);
         }
       }
@@ -763,14 +764,14 @@ Hub.grid = (function () {
         resizeWidget.el.dataset.gridWidth = newW;
         resizeWidget.el.dataset.gridHeight = newH;
 
-        /* Build layout, resolve collisions, compact, sync DOM */
+        /* Build layout, resolve collisions, compact (pin resized widget) */
         var layout = buildLayoutFromGrid(gridEl);
         var resizedItem = layout.find(function (it) { return it.widget === resizeWidget.el.dataset.gridWidget; });
         if (resizedItem) {
           resizedItem.width = newW;
           resizedItem.height = newH;
           resolveCollisions(layout, resizedItem);
-          compact(layout);
+          compact(layout, resizedItem.widget);
           syncLayoutToDOM(layout);
         }
       }
@@ -778,9 +779,10 @@ Hub.grid = (function () {
 
     function onMouseUp() {
       if (dragWidget || resizeWidget) {
-        /* Final compaction pass on drop */
+        /* Final compaction pass on drop — keep the dropped widget pinned so placement is respected */
+        var pinnedId = (dragWidget || resizeWidget).el.dataset.gridWidget;
         var layout = buildLayoutFromGrid(gridEl);
-        compact(layout);
+        compact(layout, pinnedId);
         syncLayoutToDOM(layout);
       }
       dragWidget = null;
