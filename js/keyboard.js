@@ -79,6 +79,25 @@ Hub.keyboard = (function () {
      Excludes keys already bound: h j k l d u z e p t y */
   var ERGO_KEYS = "fgsatrewvbcniopqyxm".split("");
   var RESERVED = { h:1, j:1, k:1, l:1, d:1, u:1, z:1, e:1, p:1, t:1, a:1, y:1 };
+  var searchFocusKeys = { "/": true };
+
+  function isReservedKey(key) {
+    return !!RESERVED[key] || !!searchFocusKeys[String(key || "").toLowerCase()];
+  }
+
+  function setSearchFocusKey(key) {
+    setSearchFocusKeys([key || "/"]);
+  }
+
+  function setSearchFocusKeys(keys) {
+    searchFocusKeys = {};
+    (keys || ["/"]).forEach(function (key) {
+      key = String(key || "").toLowerCase();
+      if (!key) return;
+      searchFocusKeys[key] = true;
+    });
+    if (!Object.keys(searchFocusKeys).length) searchFocusKeys["/"] = true;
+  }
 
   /* Home-row letters for selecting items within an active chord.
      a=1st item, s=2nd, d=3rd … up to 9 items. */
@@ -143,13 +162,13 @@ Hub.keyboard = (function () {
 
       for (var j = 0; j < titleLetters.length; j++) {
         var ch = titleLetters[j];
-        if (!RESERVED[ch] && !used[ch]) { assigned = ch; break; }
+        if (!isReservedKey(ch) && !used[ch]) { assigned = ch; break; }
       }
 
       /* Fallback: first available ergonomic key */
       if (!assigned) {
         for (var k = 0; k < ERGO_KEYS.length; k++) {
-          if (!used[ERGO_KEYS[k]]) { assigned = ERGO_KEYS[k]; break; }
+          if (!isReservedKey(ERGO_KEYS[k]) && !used[ERGO_KEYS[k]]) { assigned = ERGO_KEYS[k]; break; }
         }
       }
 
@@ -266,7 +285,7 @@ Hub.keyboard = (function () {
         }
       }
 
-      if (!typing && key === "/") { e.preventDefault(); Hub.focusSearch(); return; }
+      if (!typing && !Hub.grid.isEditing() && searchFocusKeys[key] && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); Hub.focusSearch(key); return; }
 
       if (!typing && key === "?") { e.preventDefault(); Hub.help.show(); return; }
       if (!typing && key === "z") { e.preventDefault(); Hub.zen.toggle(); Hub.zen.updateButtonIcon(); return; }
@@ -410,6 +429,9 @@ Hub.keyboard = (function () {
     getFocusIndex: function () { return focusIndex; },
     assignWidgetKeys: assignWidgetKeys,
     clearChord: clearChord,
+    setSearchFocusKey: setSearchFocusKey,
+    setSearchFocusKeys: setSearchFocusKeys,
+    isReservedKey: isReservedKey,
     getWidgetKeyMap: function () { return widgetKeyMap; },
     ERGO_KEYS: ERGO_KEYS,
     RESERVED: RESERVED,

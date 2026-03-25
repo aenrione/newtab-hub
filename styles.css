@@ -78,11 +78,40 @@ body, input, select, button, textarea { font-family: var(--font-body); }
 /* ── Zen mode ── */
 .shell > .topbar,
 .shell > .dashboard-grid { transition: opacity 300ms ease; }
-.shell.zen-mode > .topbar,
 .shell.zen-mode > .dashboard-grid {
   opacity: 0;
   pointer-events: none;
   transition: opacity 600ms ease;
+}
+.shell.zen-mode > .topbar {
+  margin-bottom: 0;
+  min-height: 0;
+  justify-content: flex-end;
+}
+.shell.zen-mode > .topbar .topbar-left,
+.shell.zen-mode > .topbar .topbar-time,
+.shell.zen-mode > .topbar .profile-switcher,
+.shell.zen-mode > .topbar #layout-edit-toggle,
+.shell.zen-mode > .topbar #theme-button,
+.shell.zen-mode > .topbar #help-button {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+.shell.zen-mode > .topbar .topbar-controls { gap: 0; }
+.shell.zen-mode > .topbar #zen-toggle {
+  position: fixed;
+  top: 14px;
+  right: 20px;
+  z-index: 30;
+  background: rgba(16, 24, 40, 0.68);
+  border-color: var(--border-strong);
+  backdrop-filter: blur(8px);
 }
 body:has(.shell.zen-mode) > #hub-bg-image,
 body:has(.shell.zen-mode) > #hub-bg-video {
@@ -247,23 +276,24 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   font-weight: 700;
   font-family: var(--font-mono, monospace);
   text-transform: uppercase;
-  color: var(--muted);
-  background: rgba(121, 174, 232, 0.08);
-  border: 1px solid rgba(121, 174, 232, 0.18);
+  color: var(--hint-text);
+  background: var(--hint-bg);
+  border: 1px solid var(--hint-border);
   border-radius: 4px;
   line-height: 1;
   vertical-align: middle;
-  opacity: 0.7;
-  transition: opacity 150ms, background 150ms, color 150ms;
+  opacity: 0.9;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+  transition: opacity 150ms, background 150ms, color 150ms, border-color 150ms;
 }
 .chord-active .chord-key-badge {
   opacity: 1;
-  color: var(--accent-2, #79aee8);
-  background: rgba(121, 174, 232, 0.18);
-  border-color: rgba(121, 174, 232, 0.4);
+  color: var(--hint-accent-text);
+  background: var(--hint-accent-bg);
+  border-color: var(--hint-accent-border);
 }
 .chord-active {
-  outline: 2px solid rgba(121, 174, 232, 0.5);
+  outline: 2px solid var(--hint-accent-border);
   outline-offset: 2px;
   border-radius: var(--radius-md);
 }
@@ -278,8 +308,9 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   font-size: 0.58rem;
   font-weight: 700;
   font-family: var(--font-mono, monospace);
-  color: var(--bg, #0f172a);
-  background: var(--accent-2, #79aee8);
+  color: var(--hint-accent-text);
+  background: var(--hint-accent-bg);
+  border: 1px solid var(--hint-accent-border);
   border-radius: 3px;
   line-height: 1;
   flex-shrink: 0;
@@ -318,6 +349,10 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 /* ── Grid editing ── */
 .grid-editing .widget { border-style: dashed; border-color: var(--accent-2); position: relative; z-index: 1; }
 .grid-editing .widget:hover { z-index: 2; }
+.grid-editing .chord-key-badge:not(.edit-chord-badge) {
+  opacity: 0;
+  visibility: hidden;
+}
 
 .grid-edit-bar {
   display: flex;
@@ -339,9 +374,10 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   display: inline-block;
   padding: 0 4px;
   margin-left: 2px;
-  border: 1px solid rgba(121, 174, 232, 0.25);
+  border: 1px solid var(--hint-border);
   border-radius: 3px;
-  background: rgba(121, 174, 232, 0.08);
+  background: var(--hint-bg);
+  color: var(--hint-text);
   font-size: 0.62rem;
   font-weight: 600;
   font-family: var(--font-body);
@@ -403,10 +439,10 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .help-table kbd {
   display: inline-block;
   padding: 1px 6px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--hint-border);
   border-radius: var(--radius-sm);
-  background: rgba(148, 163, 184, 0.06);
-  color: var(--text);
+  background: var(--hint-bg);
+  color: var(--hint-text);
   font-size: 0.72rem;
   font-weight: 600;
   font-family: var(--font-body);
@@ -624,6 +660,12 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   gap: 8px;
 }
 .theme-sidebar.is-open { transform: translateX(0); }
+.theme-sidebar-intro {
+  margin: -2px 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
 .theme-sidebar-header {
   display: flex;
   align-items: center;
@@ -665,6 +707,52 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .theme-sidebar .theme-scope-label { font-size: 0.7rem; }
 .theme-sidebar .theme-actions { flex-shrink: 0; }
 .theme-sidebar .customize-label { font-size: 0.76rem; flex-shrink: 0; }
+.theme-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+.theme-section-header {
+  display: grid;
+  gap: 3px;
+}
+.theme-section-header h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+.theme-section-header p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.theme-section-body {
+  display: grid;
+  gap: 10px;
+}
+.theme-color-groups {
+  display: grid;
+  gap: 10px;
+}
+.theme-color-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.theme-color-group h4 {
+  margin: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
 .theme-sidebar-overlay {
   position: fixed;
   inset: 0;
@@ -890,6 +978,12 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   pointer-events: none;
 }
 .widget-edit-controls > * { pointer-events: auto; }
+.widget-edit-left,
+.widget-edit-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .widget-edit-btn {
   background: none;
   border: none;
@@ -905,7 +999,7 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .widget-edit-btn.is-drag { cursor: grab; }
 .widget-edit-btn.is-drag:active { cursor: grabbing; }
 .widget-edit-btn.is-trash:hover { color: var(--down); }
-.widget-edit-right { display: flex; gap: 2px; }
+.widget-edit-right { gap: 2px; }
 
 .widget-resize-handle {
   position: absolute;
@@ -933,21 +1027,23 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 }
 .widget-grabbed .widget-edit-btn.is-drag { color: var(--warn, #fbbf24); }
 .edit-chord-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  background: var(--bg);
-  color: var(--muted-strong);
-  font-size: 0.6rem;
-  font-weight: 700;
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  margin-left: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: var(--hint-accent-bg);
+  color: var(--hint-accent-text);
+  border-color: var(--hint-accent-border);
+  border-radius: 5px;
+  font-size: 0.64rem;
   letter-spacing: 0.05em;
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 1;
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.24);
 }
 
 /* ── Modals (add widget + config) ── */

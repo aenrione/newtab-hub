@@ -7,7 +7,9 @@ Hub.search = (function () {
     results: [],
     activeIndex: 0,
     searchBaseUrl: "https://duckduckgo.com/?q=",
-    indexFn: null
+    indexFn: null,
+    sourceConfig: null,
+    sourceLimits: null
   };
 
   var _debounceTimer = null;
@@ -25,14 +27,68 @@ Hub.search = (function () {
     return "https://" + t;
   }
 
-  function buildQueryAction(query) {
+  function normalizeSourceConfig(config) {
+    var normalized = Object.assign({
+      dashboard: true,
+      bookmarks: true,
+      history: true,
+      webSearch: true
+    }, config || {});
+
+    Object.keys(normalized).forEach(function (key) {
+      if (normalized[key] === "false" || normalized[key] === "0" || normalized[key] === 0) normalized[key] = false;
+      else normalized[key] = normalized[key] !== false;
+    });
+
+    return normalized;
+  }
+
+  function normalizeSourceLimits(limits) {
+    var normalized = Object.assign({
+      dashboard: 6,
+      bookmarks: 5,
+      history: 5
+    }, limits || {});
+
+    Object.keys(normalized).forEach(function (key) {
+      var num = Number(normalized[key]);
+      if (!Number.isFinite(num)) num = key === "dashboard" ? 6 : 5;
+      normalized[key] = Math.max(1, Math.min(20, Math.round(num)));
+    });
+
+    return normalized;
+  }
+
+  function buildQueryAction(query, opts) {
     var t = query.trim();
+    var sources = normalizeSourceConfig(opts && opts.sources);
     if (!t) return null;
     if (looksLikeUrl(t)) {
       var href = normalizeUrlInput(t);
       return { title: "Go to " + href, href: href, type: "URL" };
     }
+    if (!sources.webSearch) return null;
     return { title: "Search the web for " + t, href: state.searchBaseUrl + encodeURIComponent(t), type: "Search" };
+  }
+
+  function buildSearchText(item) {
+    return [
+      item.searchText,
+      item.title,
+      item.type,
+      item.subtitle,
+      item.href,
+      item.host
+    ].filter(Boolean).join(" ");
+  }
+
+  function activateResult(item, newTab) {
+    if (!item) return;
+    if (typeof item.action === "function") {
+      item.action({ newTab: !!newTab });
+      return;
+    }
+    if (item.href) Hub.openItem(item.href, newTab);
   }
 
   function renderResults(els) {
@@ -42,8 +98,8 @@ Hub.search = (function () {
       btn.className = "search-result" + (i === state.activeIndex ? " active-result" : "");
       btn.type = "button";
       btn.dataset.index = String(i);
-      btn.innerHTML = "<strong>" + Hub.escapeHtml(item.title) + "</strong><small>" + Hub.escapeHtml(item.type || Hub.formatHost(item.href)) + "</small>";
-      btn.addEventListener("click", function () { Hub.openItem(item.href, false); });
+      btn.innerHTML = "<strong>" + Hub.escapeHtml(item.title) + "</strong><small>" + Hub.escapeHtml(item.type || item.subtitle || Hub.formatHost(item.href)) + "</small>";
+      btn.addEventListener("click", function () { activateResult(item, false); });
       frag.appendChild(btn);
     });
     els.resultsContainer.replaceChildren(frag);
@@ -51,20 +107,22 @@ Hub.search = (function () {
   }
 
   /* Query chrome.bookmarks + chrome.history in parallel, deduped against local results */
-  function fetchBrowserResults(query, localHrefs) {
+  function fetchBrowserResults(query, localHrefs, sourceConfig, sourceLimits) {
+    var sources = normalizeSourceConfig(sourceConfig);
+    var limits = normalizeSourceLimits(sourceLimits);
     var promises = [];
-    if (typeof chrome !== "undefined" && chrome.bookmarks) {
+    if (sources.bookmarks && typeof chrome !== "undefined" && chrome.bookmarks) {
       promises.push(
         chrome.bookmarks.search(query).then(function (results) {
-          return results.filter(function (b) { return b.url; }).slice(0, 5).map(function (b) {
+          return results.filter(function (b) { return b.url; }).slice(0, limits.bookmarks).map(function (b) {
             return { title: b.title || b.url, href: b.url, type: "Bookmark" };
           });
         }).catch(function () { return []; })
       );
     }
-    if (typeof chrome !== "undefined" && chrome.history) {
+    if (sources.history && typeof chrome !== "undefined" && chrome.history) {
       promises.push(
-        chrome.history.search({ text: query, maxResults: 5 }).then(function (results) {
+        chrome.history.search({ text: query, maxResults: limits.history }).then(function (results) {
           return results.map(function (h) {
             return { title: h.title || h.url, href: h.url, type: "History" };
           });
@@ -83,12 +141,16 @@ Hub.search = (function () {
           merged.push(item);
         });
       });
-      return merged.slice(0, 6);
+      return merged.slice(0, limits.bookmarks + limits.history);
     });
   }
 
-  function update(query, els) {
+  function update(query, els, opts) {
     var nq = Hub.normalize(query);
+    var sources = normalizeSourceConfig(opts && opts.sources);
+    var limits = normalizeSourceLimits(opts && opts.sourceLimits);
+    state.sourceConfig = sources;
+    state.sourceLimits = limits;
     _lastQuery = query;
 
     if (!nq) {
@@ -101,12 +163,15 @@ Hub.search = (function () {
     }
 
     /* Synchronous local results — render immediately */
-    var index = state.indexFn ? state.indexFn() : [];
-    var matches = index.filter(function (item) {
-      return Hub.normalize(item.title + " " + (item.type || "") + " " + (item.href || "")).includes(nq);
-    }).slice(0, 6);
+    var matches = [];
+    if (sources.dashboard) {
+      var index = state.indexFn ? state.indexFn() : [];
+      matches = index.filter(function (item) {
+        return Hub.normalize(buildSearchText(item)).includes(nq);
+      }).slice(0, limits.dashboard);
+    }
 
-    var qa = buildQueryAction(query);
+    var qa = buildQueryAction(query, { sources: sources });
     state.results = qa ? [qa].concat(matches) : matches;
     state.activeIndex = 0;
     renderResults(els);
@@ -116,7 +181,7 @@ Hub.search = (function () {
     _debounceTimer = setTimeout(function () {
       var capturedQuery = query;
       var localHrefs = state.results.map(function (r) { return r.href; });
-      fetchBrowserResults(query, localHrefs).then(function (browserResults) {
+      fetchBrowserResults(query, localHrefs, sources, limits).then(function (browserResults) {
         if (_lastQuery !== capturedQuery || !browserResults.length) return;
         /* Append browser results after local ones, preserving active index */
         var prevLen = state.results.length;
@@ -142,7 +207,10 @@ Hub.search = (function () {
     update: update,
     cycle: cycle,
     currentResult: currentResult,
-    buildQueryAction: buildQueryAction
+    buildQueryAction: buildQueryAction,
+    activateResult: activateResult,
+    normalizeSourceConfig: normalizeSourceConfig,
+    normalizeSourceLimits: normalizeSourceLimits
   };
 })();
 

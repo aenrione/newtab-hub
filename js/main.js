@@ -14,6 +14,10 @@
     collapsedGroups: {},
     healthResults: {},
     healthTimer: null,
+    pendingDashboardRefresh: null,
+    primarySearchWidgetId: null,
+    searchWidgetConfigs: {},
+    searchFocusWidgetIds: {},
     autoFocusPausedUntil: 0,
     _collapsedGroups: new Set(),
     _onToggleGroup: null
@@ -42,6 +46,10 @@
 
   function supportsHealth(url) { return /^https?:\/\//i.test(String(url || "")); }
 
+  function isExplicitHealthCheck(item) {
+    return typeof item.healthCheck === "string" && item.healthCheck.trim();
+  }
+
   async function runSingleCheck(item, key) {
     var target = healthTarget(item);
     if (!supportsHealth(target)) return;
@@ -50,7 +58,10 @@
     try {
       var res;
       try { res = await Hub.fetchWithTimeout(target, { method: "HEAD" }, 4000); }
-      catch (_) { res = await Hub.fetchWithTimeout(target, { method: "GET" }, 5000); }
+      catch (_) {
+        if (!isExplicitHealthCheck(item)) throw _;
+        res = await Hub.fetchWithTimeout(target, { method: "GET" }, 5000);
+      }
       if (res.status >= 200 && res.status < 400) result = { status: "ok" };
       else if (res.status >= 400 && res.status < 500) result = { status: "warn" };
     } catch (_) {}
@@ -59,12 +70,14 @@
 
   async function runHealthChecks(widgets, token) {
     var checks = [];
+    var widgetIdsToRefresh = {};
     widgets.forEach(function (w) {
       var items = (w.config && w.config.items) || [];
       var scope = w.config && w.config.title || w.type;
       items.forEach(function (item) {
         if (supportsHealth(healthTarget(item))) {
           checks.push({ item: item, scope: scope });
+          widgetIdsToRefresh[w.id] = true;
         }
       });
     });
@@ -73,17 +86,22 @@
       return runSingleCheck(c.item, Hub.healthKey(c.scope, c.item));
     }));
 
-    /* Re-render only sync widgets (pinned, link-groups) to update health dots.
-       Skip widgets with async loaders (markets, feeds) to avoid resetting their content. */
+    /* Re-render only sync widgets that actually expose health dots.
+       This avoids wiping widgets like search during startup. */
     if (token === state.renderToken) {
       var widgets = resolvedWidgets();
       widgets.forEach(function (w) {
+        if (!widgetIdsToRefresh[w.id]) return;
         var plugin = Hub.registry.get(w.type);
         if (!plugin || !plugin.render || plugin.load) return; /* skip async widgets */
         var el = widgetElements[w.id];
         if (!el) return;
         state._collapsedGroups = new Set(state.collapsedGroups[state.activeProfile] || []);
-        plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
+        try {
+          plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
+        } catch (err) {
+          renderWidgetError(el, w, "Failed to render widget.", err);
+        }
       });
     }
   }
@@ -91,8 +109,169 @@
   function scheduleHealthRefresh() {
     if (state.healthTimer) clearTimeout(state.healthTimer);
     state.healthTimer = setTimeout(function () {
-      if (state.activeProfile) renderDashboard(state.activeProfile, { preserveFocus: true });
+      if (state.activeProfile) {
+        requestDashboardRefresh(function () {
+          return renderDashboard(state.activeProfile, { preserveFocus: true, preserveSearch: true });
+        });
+      }
     }, 300000);
+  }
+
+  function isEditableElement(el) {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (el.classList && el.classList.contains("todo-title-edit")) return true;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+  }
+
+  function shouldDeferDashboardRefresh() {
+    return Hub.grid.isEditing() || isEditableElement(document.activeElement);
+  }
+
+  function flushPendingDashboardRefresh() {
+    if (!state.pendingDashboardRefresh || shouldDeferDashboardRefresh()) return;
+    var pending = state.pendingDashboardRefresh;
+    state.pendingDashboardRefresh = null;
+    pending();
+  }
+
+  function requestDashboardRefresh(refreshFn) {
+    if (shouldDeferDashboardRefresh()) {
+      state.pendingDashboardRefresh = refreshFn;
+      return;
+    }
+    refreshFn();
+  }
+
+  function getSearchElements(widgetId) {
+    var selector = widgetId
+      ? '.widget[data-widget-id="' + widgetId + '"] [data-search-input="true"]'
+      : '[data-search-input="true"]';
+    var input = document.querySelector(selector);
+    if (!input) return null;
+    var widget = input.closest('.widget[data-widget-id]');
+    return {
+      widget: widget,
+      input: input,
+      resultsContainer: widget ? widget.querySelector('[data-search-results="true"]') : null
+    };
+  }
+
+  function getPrimarySearchElements() {
+    return getSearchElements(state.primarySearchWidgetId) || getSearchElements(null);
+  }
+
+  function getSearchElementsForTarget(target) {
+    if (!target) return getPrimarySearchElements();
+    var targetKey = String(target).toLowerCase();
+    var widgetId = state.searchFocusWidgetIds[targetKey] || target;
+    return getSearchElements(widgetId) || getPrimarySearchElements();
+  }
+
+  function getPrimarySearchInput() {
+    var els = getPrimarySearchElements();
+    return els && els.input;
+  }
+
+  function getSearchWidgetConfig(widgetId) {
+    return state.searchWidgetConfigs[widgetId] || (Hub.searchWidget && Hub.searchWidget.normalizeConfig ? Hub.searchWidget.normalizeConfig() : null);
+  }
+
+  function getSearchConfigForElement(el) {
+    var widget = el && el.closest('.widget[data-widget-id]');
+    return widget ? getSearchWidgetConfig(widget.dataset.widgetId) : getSearchWidgetConfig(state.primarySearchWidgetId);
+  }
+
+  function shouldAutoFocusSearchWidget(widget) {
+    if (!widget) return false;
+    if (Hub.searchWidget && Hub.searchWidget.normalizeConfig) {
+      return Hub.searchWidget.normalizeConfig(widget.config).autoFocusOnLoad;
+    }
+    return !!(widget.config && widget.config.autoFocusOnLoad !== false);
+  }
+
+  function captureSearchState() {
+    var input = getPrimarySearchInput();
+    if (!input) return null;
+    return {
+      widgetId: input.closest('.widget[data-widget-id]') ? input.closest('.widget[data-widget-id]').dataset.widgetId : null,
+      value: input.value,
+      focused: document.activeElement === input,
+      selectionStart: input.selectionStart,
+      selectionEnd: input.selectionEnd
+    };
+  }
+
+  function restoreSearchState(snapshot) {
+    if (!snapshot) return false;
+    var els = getSearchElements(snapshot.widgetId) || getPrimarySearchElements();
+    var input = els && els.input;
+    var resultsEl = els && els.resultsContainer;
+    if (!input || !resultsEl) return false;
+
+    input.value = snapshot.value || "";
+    var searchConfig = getSearchWidgetConfig(snapshot.widgetId);
+    Hub.search.state.searchBaseUrl = searchConfig.searchBaseUrl || "https://duckduckgo.com/?q=";
+    Hub.search.update(input.value, { resultsContainer: resultsEl }, { sources: searchConfig.sources, sourceLimits: searchConfig.sourceLimits });
+
+    if (snapshot.focused) {
+      input.focus();
+      if (typeof snapshot.selectionStart === "number" && typeof snapshot.selectionEnd === "number") {
+        input.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+      }
+    }
+
+    return true;
+  }
+
+  function buildDomSearchIndex() {
+    var seen = {};
+
+    return Array.from(document.querySelectorAll('[data-focusable="true"]')).filter(function (el) {
+      if (el.offsetParent === null) return false;
+      if (el.matches('[data-search-input="true"]')) return false;
+      return !el.closest(".widget-search");
+    }).map(function (el, index) {
+      var widgetEl = el.closest(".widget[data-widget-id]");
+      var widgetTitleEl = widgetEl && widgetEl.querySelector(".widget-header h2, .widget-header h3");
+      var widgetTitle = widgetTitleEl ? widgetTitleEl.textContent.trim() : (widgetEl && widgetEl.dataset.widgetType) || "Widget";
+      var groupEl = el.closest("details.group");
+      var groupTitle = groupEl && groupEl.dataset.groupTitle ? groupEl.dataset.groupTitle : "";
+      var title = (el.dataset.title || el.getAttribute("aria-label") || el.textContent || el.placeholder || widgetTitle || "").trim();
+      var href = el.href || "";
+      var host = href ? Hub.formatHost(href) : "";
+      var searchText = [
+        el.dataset.searchText,
+        el.dataset.title,
+        el.textContent,
+        el.getAttribute("title"),
+        el.getAttribute("aria-label"),
+        el.placeholder,
+        widgetTitle,
+        groupTitle,
+        host,
+        href
+      ].filter(Boolean).join(" ").trim();
+
+      if (!title || !searchText) return null;
+
+      var key = href || [widgetTitle, groupTitle, title, index].join("::");
+      if (seen[key]) return null;
+      seen[key] = true;
+
+      return {
+        title: title,
+        href: href || null,
+        type: groupTitle || widgetTitle,
+        host: host,
+        searchText: searchText,
+        action: href ? null : function () {
+          if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") el.focus();
+          else if (typeof el.click === "function") el.click();
+          else el.focus();
+        }
+      };
+    }).filter(Boolean);
   }
 
   /* ── Profile management ── */
@@ -197,9 +376,16 @@
 
   var widgetElements = {};
 
+  function renderWidgetError(el, widget, message, err) {
+    var title = (widget.config && widget.config.title) || (Hub.registry.get(widget.type) || {}).label || widget.type || "Widget";
+    el.innerHTML =
+      '<div class="widget-header"><h2>' + Hub.escapeHtml(title) + '</h2></div>' +
+      '<div class="empty-state">' + Hub.escapeHtml(message) + '</div>';
+    if (err) console.error("Widget failure", widget.type, widget.id, err);
+  }
+
   function buildWidgetEl(w) {
     var plugin = Hub.registry.get(w.type);
-    if (!plugin) return null;
 
     var el = document.createElement("div");
     el.className = "widget widget-" + w.type;
@@ -208,6 +394,9 @@
     el.dataset.widgetType = w.type;
     if (w.cardColor) {
       el.style.setProperty("--widget-surface", "hsl(" + w.cardColor.h + ",30%," + w.cardColor.l + "%)");
+    }
+    if (!plugin) {
+      renderWidgetError(el, w, 'Unknown widget type: ' + (w.type || "(none)"));
     }
     return el;
   }
@@ -232,7 +421,11 @@
         state.store.set(Hub.STORAGE_COLLAPSED_KEY, state.collapsedGroups);
       };
 
-      plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
+      try {
+        plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
+      } catch (err) {
+        renderWidgetError(el, w, "Failed to render widget.", err);
+      }
     });
   }
 
@@ -240,6 +433,7 @@
     opts = opts || {};
     var profile = state.bundle.profiles[profileName];
     if (!profile) return;
+    var searchSnapshot = opts.preserveSearch ? captureSearchState() : null;
 
     state.activeProfile = profileName;
     state.renderToken++;
@@ -273,27 +467,73 @@
     var profileLabelEl = document.getElementById("profile-label");
     if (profileLabelEl) profileLabelEl.textContent = profile.label || profileName;
 
-    /* Focus search immediately after DOM is ready — don't wait for async loads */
-    Hub.focusSearch();
+    /* Kick off theme/background loading early so visuals don't wait on widget fetches. */
+    var visualPromises = [
+      Hub.loadTheme(state.store, profileName, profile),
+      Hub.loadBgImage(state.store, profileName)
+    ];
 
     /* Set search base URL from search widget config */
     var searchWidget = widgets.find(function (w) { return w.type === "search"; });
-    if (searchWidget && searchWidget.config) {
-      Hub.search.state.searchBaseUrl = searchWidget.config.searchBaseUrl || "https://duckduckgo.com/?q=";
+    state.searchWidgetConfigs = {};
+    state.searchFocusWidgetIds = {};
+    widgets.filter(function (w) { return w.type === "search"; }).forEach(function (w) {
+      var normalizedConfig = Hub.searchWidget && Hub.searchWidget.normalizeConfig
+        ? Hub.searchWidget.normalizeConfig(w.config)
+        : (w.config || {});
+      state.searchWidgetConfigs[w.id] = normalizedConfig;
+      if (normalizedConfig.focusKey && !state.searchFocusWidgetIds[normalizedConfig.focusKey]) {
+        state.searchFocusWidgetIds[normalizedConfig.focusKey] = w.id;
+      }
+    });
+    state.primarySearchWidgetId = state.searchFocusWidgetIds["/"] || (searchWidget ? searchWidget.id : null);
+    var primarySearchConfig = state.primarySearchWidgetId ? getSearchWidgetConfig(state.primarySearchWidgetId) : null;
+    Hub.keyboard.setSearchFocusKeys(Object.keys(state.searchFocusWidgetIds));
+    if (primarySearchConfig) {
+      Hub.search.state.searchBaseUrl = primarySearchConfig.searchBaseUrl || "https://duckduckgo.com/?q=";
     }
+
+    /* Focus search immediately after DOM is ready — don't wait for async loads */
+    if (!restoreSearchState(searchSnapshot)) {
+      if (opts.suppressSearchAutoFocus) {
+        if (window.__disableEarlyKeys) {
+          window.__disableEarlyKeys();
+          delete window.__disableEarlyKeys;
+        }
+      } else if (shouldAutoFocusSearchWidget({ config: primarySearchConfig })) {
+        Hub.focusSearch();
+      } else if (window.__disableEarlyKeys) {
+        window.__disableEarlyKeys();
+        delete window.__disableEarlyKeys;
+        var input = getPrimarySearchInput();
+        if (input && document.activeElement === input) input.blur();
+      }
+    }
+
+    /* Search index — computed from the live DOM so slash-search can target any focusable item. */
+    Hub.search.state.indexFn = function () {
+      return buildDomSearchIndex();
+    };
 
     /* Async loads */
     if (!opts.skipAsync) {
-      var loadPromises = [];
+      var loadPromises = visualPromises.slice();
       widgets.forEach(function (w) {
         var el = widgetElements[w.id];
         var plugin = Hub.registry.get(w.type);
         if (el && plugin && plugin.load) {
-          loadPromises.push(plugin.load(el, Object.assign({}, w.config || {}, { _id: w.id }), state, token));
+          loadPromises.push(
+            plugin.load(el, Object.assign({}, w.config || {}, { _id: w.id }), state, token).catch(function (err) {
+              if (token !== state.renderToken) return;
+              renderWidgetError(el, w, "Failed to load widget data.", err);
+            })
+          );
         }
       });
       loadPromises.push(runHealthChecks(widgets, token));
       await Promise.allSettled(loadPromises);
+    } else {
+      await Promise.allSettled(visualPromises);
     }
 
     if (token !== state.renderToken) return;
@@ -302,34 +542,18 @@
     /* Assign chord key shortcuts to widgets */
     Hub.keyboard.assignWidgetKeys();
 
-    /* Search index (deduplicated by href) */
-    Hub.search.state.indexFn = function () {
-      var all = state.links
-        .concat(state.markets.map(function (m) { return { title: m.label, href: m.href, type: "Market" }; }))
-        .concat(state.feedEntries);
-      var seen = {};
-      return all.filter(function (item) {
-        if (!item.href || seen[item.href]) return false;
-        seen[item.href] = true;
-        return true;
-      });
-    };
-
-    /* Apply theme and per-profile background */
-    await Hub.loadTheme(state.store, profileName, profile);
-    await Hub.loadBgImage(state.store, profileName);
-
     /* Cache favicons after images have a chance to load */
     setTimeout(function () { Hub.cacheFavicons(state.store); }, 2000);
   }
 
   /* ── Focus management ── */
 
-  Hub.focusSearch = function () {
-    var input = document.getElementById("quick-search");
+  Hub.focusSearch = function (target) {
+    var els = getSearchElementsForTarget(target);
+    var input = els && els.input;
     if (!input) return;
-    if (window.__flushEarlyKeys) { window.__flushEarlyKeys(); delete window.__flushEarlyKeys; return; }
-    if (state.autoFocusPausedUntil > Date.now()) return;
+    if (!target && window.__flushEarlyKeys) { window.__flushEarlyKeys(); delete window.__flushEarlyKeys; return; }
+    if (!target && state.autoFocusPausedUntil > Date.now()) return;
     /* Don't disrupt the user if they're already typing */
     if (document.activeElement === input) return;
     input.focus();
@@ -348,19 +572,28 @@
 
   function bindSearch() {
     document.addEventListener("input", function (e) {
-      if (e.target.id !== "quick-search") return;
-      Hub.search.update(e.target.value, { resultsContainer: document.getElementById("search-results") });
+      if (!e.target.matches('[data-search-input="true"]')) return;
+      var widget = e.target.closest('.widget[data-widget-id]');
+      var resultsEl = widget && widget.querySelector('[data-search-results="true"]');
+      if (!resultsEl) return;
+      var searchConfig = getSearchConfigForElement(e.target);
+      Hub.search.state.searchBaseUrl = searchConfig.searchBaseUrl || "https://duckduckgo.com/?q=";
+      Hub.search.update(e.target.value, { resultsContainer: resultsEl }, { sources: searchConfig.sources, sourceLimits: searchConfig.sourceLimits });
     });
 
     document.addEventListener("keydown", function (e) {
-      if (e.target.id !== "quick-search") return;
-      var resultsEl = document.getElementById("search-results");
+      if (!e.target.matches('[data-search-input="true"]')) return;
+      var widget = e.target.closest('.widget[data-widget-id]');
+      var resultsEl = widget && widget.querySelector('[data-search-results="true"]');
+      var searchConfig = getSearchConfigForElement(e.target);
+      if (!resultsEl) return;
       if (e.key === "ArrowDown") { e.preventDefault(); Hub.search.cycle(1, resultsEl); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); Hub.search.cycle(-1, resultsEl); return; }
       if (e.key === "Enter") {
         e.preventDefault();
-        var target = Hub.search.currentResult() || Hub.search.buildQueryAction(e.target.value);
-        if (target) Hub.openItem(target.href, e.metaKey || e.ctrlKey);
+        Hub.search.state.searchBaseUrl = searchConfig.searchBaseUrl || "https://duckduckgo.com/?q=";
+        var target = Hub.search.currentResult() || Hub.search.buildQueryAction(e.target.value, { sources: searchConfig.sources });
+        if (target) Hub.search.activateResult(target, e.metaKey || e.ctrlKey);
         return;
       }
       if (e.key === "Escape") {
@@ -372,10 +605,13 @@
     });
 
     document.addEventListener("click", function (e) {
-      var resultsEl = document.getElementById("search-results");
-      if (resultsEl && !resultsEl.contains(e.target) && e.target.id !== "quick-search") {
-        resultsEl.classList.add("hidden");
-      }
+      document.querySelectorAll('[data-search-results="true"]').forEach(function (resultsEl) {
+        var widget = resultsEl.closest('.widget[data-widget-id]');
+        var input = widget && widget.querySelector('[data-search-input="true"]');
+        if (!resultsEl.contains(e.target) && e.target !== input) {
+          resultsEl.classList.add("hidden");
+        }
+      });
     });
   }
 
@@ -673,7 +909,7 @@
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
       }
 
-      await renderDashboard(state.activeProfile);
+      await renderDashboard(state.activeProfile, { suppressSearchAutoFocus: true });
     }
 
     async function cancelLayout() {
@@ -691,7 +927,7 @@
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
       }
       savedOverrides = null;
-      await renderDashboard(state.activeProfile);
+      await renderDashboard(state.activeProfile, { suppressSearchAutoFocus: true });
     }
 
     async function onConfigSave(widgetId) {
@@ -737,7 +973,7 @@
       if (editExitFn) editExitFn();
       editExitFn = null;
       state.profileOverrides[state.activeProfile] = { widgets: clone };
-      renderDashboard(state.activeProfile).then(function () {
+      renderDashboard(state.activeProfile, { suppressSearchAutoFocus: true }).then(function () {
         var gridEl = document.getElementById("dashboard-grid");
         Hub.grid.setEditClone(clone);
         editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave);
@@ -747,6 +983,10 @@
     function enterEdit() {
       var gridEl = document.getElementById("dashboard-grid");
       if (Hub.grid.isEditing()) return;
+      if (Hub.zen.isActive()) {
+        Hub.zen.exit();
+        Hub.zen.updateButtonIcon();
+      }
       var current = state.profileOverrides[state.activeProfile];
       savedOverrides = current ? JSON.parse(JSON.stringify(current)) : undefined;
       var widgets = resolvedWidgets();
@@ -851,15 +1091,20 @@
       chrome.storage.onChanged.addListener(async function (changes, area) {
         if (area !== "local") return;
         if (!changes["new-tab-sync-last"]) return;
-        if (Hub.grid.isEditing()) return;
-        state.bundle = await loadBundle();
-        state.profileOverrides = (await state.store.get(Hub.STORAGE_OVERRIDES_KEY)) || {};
-        var activeProfile = state.bundle.profiles[state.activeProfile]
-          ? state.activeProfile
-          : state.bundle.defaultProfile;
-        await renderDashboard(activeProfile);
+        requestDashboardRefresh(async function () {
+          state.bundle = await loadBundle();
+          state.profileOverrides = (await state.store.get(Hub.STORAGE_OVERRIDES_KEY)) || {};
+          var activeProfile = state.bundle.profiles[state.activeProfile]
+            ? state.activeProfile
+            : state.bundle.defaultProfile;
+          await renderDashboard(activeProfile, { preserveSearch: true });
+        });
       });
     }
+
+    document.addEventListener("focusout", function () {
+      setTimeout(flushPendingDashboardRefresh, 0);
+    });
 
     /* Auto-download on new tab open: HEAD-check the remote file first.
        Only triggers a full download if ETag/Last-Modified has changed
@@ -869,7 +1114,6 @@
       chrome.runtime.sendMessage({ action: "syncAutoDownload" });
     }
 
-    Hub.focusSearch();
   }
 
   init().catch(function (err) { console.error("Failed to initialize New Tab Hub", err); });

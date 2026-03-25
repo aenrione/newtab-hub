@@ -3,12 +3,24 @@
 window.Hub = window.Hub || {};
 
 Hub.zen = (function () {
-  var IDLE_TIMEOUT = 5000; // 10 seconds
+  var DEFAULT_IDLE_TIMEOUT = 5000;
+  var idleTimeoutMs = DEFAULT_IDLE_TIMEOUT;
   var active = false;
   var timer = null;
   var getState = null;
   var shell = null;
   var manuallyToggled = false;
+
+  function sanitizeIdleTimeoutMs(value) {
+    var ms = Number(value);
+    if (!Number.isFinite(ms)) return DEFAULT_IDLE_TIMEOUT;
+    return Math.max(1000, Math.min(120000, Math.round(ms)));
+  }
+
+  function getStore() {
+    var st = getState && getState();
+    return st && st.store;
+  }
 
   function hasBgImage() {
     var img = document.getElementById("hub-bg-image");
@@ -17,11 +29,18 @@ Hub.zen = (function () {
     return !!vid;
   }
 
+  function isEditableElement(el) {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (el.classList && el.classList.contains("todo-title-edit")) return true;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+  }
+
   function shouldBlockZen() {
-    if (!getState) return false;
-    var st = getState();
     /* Block during edit mode */
-    if (st.editing) return true;
+    if (Hub.grid && Hub.grid.isEditing && Hub.grid.isEditing()) return true;
+    /* Block while user is typing / focused in form controls */
+    if (isEditableElement(document.activeElement)) return true;
     /* Block when theme sidebar is open */
     if (document.querySelector(".theme-sidebar.is-open")) return true;
     /* Block when help dialog is open */
@@ -68,8 +87,30 @@ Hub.zen = (function () {
     clearTimeout(timer);
     timer = null;
     if (!manuallyToggled && hasBgImage() && !shouldBlockZen()) {
-      timer = setTimeout(enter, IDLE_TIMEOUT);
+      timer = setTimeout(enter, idleTimeoutMs);
     }
+  }
+
+  async function setIdleTimeoutMs(value, persist) {
+    idleTimeoutMs = sanitizeIdleTimeoutMs(value);
+    resetTimer();
+    if (persist) {
+      var store = getStore();
+      if (store) {
+        await store.set(Hub.STORAGE_ZEN_SETTINGS_KEY, { idleTimeoutMs: idleTimeoutMs });
+      }
+    }
+    return idleTimeoutMs;
+  }
+
+  async function loadSettings() {
+    var store = getStore();
+    if (!store) return idleTimeoutMs;
+    var saved = await store.get(Hub.STORAGE_ZEN_SETTINGS_KEY);
+    if (saved && saved.idleTimeoutMs != null) {
+      idleTimeoutMs = sanitizeIdleTimeoutMs(saved.idleTimeoutMs);
+    }
+    return idleTimeoutMs;
   }
 
   function onActivity() {
@@ -96,9 +137,19 @@ Hub.zen = (function () {
       }
     });
     document.addEventListener("click", onActivity);
+    document.addEventListener("focusin", function () {
+      if (shouldBlockZen()) {
+        if (active && !manuallyToggled) {
+          exit();
+          updateButtonIcon();
+        } else if (!active) {
+          resetTimer();
+        }
+      }
+    });
 
     updateButtonIcon();
-    resetTimer();
+    loadSettings().finally(resetTimer);
   }
 
   return {
@@ -106,6 +157,8 @@ Hub.zen = (function () {
     toggle: toggle,
     exit: exit,
     isActive: function () { return active; },
+    getIdleTimeoutMs: function () { return idleTimeoutMs; },
+    setIdleTimeoutMs: setIdleTimeoutMs,
     resetTimer: resetTimer,
     updateButtonIcon: updateButtonIcon
   };

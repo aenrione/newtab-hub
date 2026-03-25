@@ -19,7 +19,6 @@ Hub.grid = (function () {
   function buildEditChordMap(gridEl) {
     var keyMap   = Hub.keyboard.getWidgetKeyMap();
     var ergoKeys = Hub.keyboard.ERGO_KEYS;
-    var reserved = Hub.keyboard.RESERVED;
 
     /* Collect already-used keys so we don't double-assign */
     var used = {};
@@ -37,7 +36,7 @@ Hub.grid = (function () {
       if (widgetFirstKey.has(el)) return;
       for (var i = 0; i < ergoKeys.length; i++) {
         var k = ergoKeys[i];
-        if (!reserved[k] && !EDIT_ACTION_KEYS[k] && !used[k]) {
+        if (!Hub.keyboard.isReservedKey(k) && !EDIT_ACTION_KEYS[k] && !used[k]) {
           used[k] = true;
           widgetFirstKey.set(el, k);
           break;
@@ -115,6 +114,30 @@ Hub.grid = (function () {
         item.row = candidate.row;
       }
     }
+  }
+
+  function findFirstAvailableSlot(layout, width, height) {
+    var maxRow = layout.reduce(function (m, item) {
+      return Math.max(m, (item.row || 1) + (item.height || 1));
+    }, 1);
+
+    for (var row = 1; row <= maxRow + 1; row++) {
+      for (var col = 1; col <= COLS - width + 1; col++) {
+        var candidate = {
+          widget: "__candidate__",
+          col: col,
+          row: row,
+          width: width,
+          height: height
+        };
+        var blocked = layout.some(function (item) {
+          return collides(candidate, item);
+        });
+        if (!blocked) return { col: col, row: row };
+      }
+    }
+
+    return { col: 1, row: maxRow + 1 };
   }
 
   /* Build a layout array from current DOM state */
@@ -502,14 +525,16 @@ Hub.grid = (function () {
         var iconKey = Hub.iconForType[p.type] || "plus";
         card.innerHTML = (Hub.icons[iconKey] || "") + "<span>" + Hub.escapeHtml(p.label) + "</span>";
         card.addEventListener("click", function () {
-          var maxRow = editClone.reduce(function (m, w) { return Math.max(m, (w.row || 1) + (w.height || 1)); }, 1);
+          var width = 4;
+          var height = 1;
+          var slot = findFirstAvailableSlot(editClone, width, height);
           var newWidget = {
             id: Hub.uid(),
             type: p.type,
-            col: 1,
-            row: maxRow,
-            width: 4,
-            height: 1,
+            col: slot.col,
+            row: slot.row,
+            width: width,
+            height: height,
             config: p.defaultConfig()
           };
           editClone.push(newWidget);
@@ -813,12 +838,20 @@ Hub.grid = (function () {
 
     showEditBar(onSave, onCancel, gridEl, onAdded);
 
+    gridEl.querySelectorAll('[data-search-input="true"]').forEach(function (input) {
+      input.disabled = true;
+      input.tabIndex = -1;
+    });
+
     gridEl.querySelectorAll(".widget").forEach(function (w) {
       w.classList.add("widget-editable");
 
       /* Edit controls bar */
       var controls = document.createElement("div");
       controls.className = "widget-edit-controls";
+
+      var leftGroup = document.createElement("div");
+      leftGroup.className = "widget-edit-left";
 
       var dragBtn = document.createElement("button");
       dragBtn.className = "widget-edit-btn is-drag";
@@ -838,9 +871,10 @@ Hub.grid = (function () {
       trashBtn.innerHTML = Hub.icons.trash2;
       trashBtn.title = "Remove";
 
+      leftGroup.appendChild(dragBtn);
       rightGroup.appendChild(gearBtn);
       rightGroup.appendChild(trashBtn);
-      controls.appendChild(dragBtn);
+      controls.appendChild(leftGroup);
       controls.appendChild(rightGroup);
       w.prepend(controls);
 
@@ -883,12 +917,12 @@ Hub.grid = (function () {
     getEditableWidgets(gridEl).forEach(function (el) {
       var key = el.dataset.editChordKey;
       if (!key) return;
-      var dragBtn = el.querySelector(".widget-edit-btn.is-drag");
-      if (!dragBtn) return;
+      var controls = el.querySelector(".widget-edit-controls");
+      if (!controls) return;
       var badge = document.createElement("span");
-      badge.className = "edit-chord-badge";
+      badge.className = "chord-key-badge edit-chord-badge";
       badge.textContent = key.toUpperCase();
-      dragBtn.after(badge);
+      controls.appendChild(badge);
     });
 
     function onMouseMove(e) {
@@ -980,6 +1014,10 @@ Hub.grid = (function () {
       hideEditBar();
       gridEl.querySelectorAll(".widget-edit-controls, .widget-resize-handle").forEach(function (h) { h.remove(); });
       gridEl.querySelectorAll(".widget-editable").forEach(function (w) { w.classList.remove("widget-editable"); });
+      gridEl.querySelectorAll('[data-search-input="true"]').forEach(function (input) {
+        input.disabled = false;
+        input.tabIndex = 0;
+      });
       editClone = null;
     };
   }

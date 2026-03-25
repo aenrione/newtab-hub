@@ -8,6 +8,7 @@
   "todo",
   "github-prs",
   "sonarr",
+  "radarr",
   "weather",
   "hacker-news",
   "reddit",
@@ -18,5 +19,13 @@
   "html",
   "calendar",
   "bookmarks",
-  "radarr"
+  "lobsters",
+  "repository",
+  "twitch-channels",
+  "twitch-top-games",
+  "change-detection",
+  "custom-api",
+  "dns-stats",
+  "group",
+  "grafana"
 ]

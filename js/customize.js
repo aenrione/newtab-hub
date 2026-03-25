@@ -27,6 +27,27 @@ Hub.customize = (function () {
     if (themeOverlay) themeOverlay.classList.remove("is-open");
   }
 
+  function startCaseLabel(key) {
+    return String(key || "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/^./, function (ch) { return ch.toUpperCase(); });
+  }
+
+  function createThemeSection(sidebar, title, description) {
+    var section = document.createElement("section");
+    section.className = "theme-section";
+    var header = document.createElement("div");
+    header.className = "theme-section-header";
+    header.innerHTML = '<h3>' + Hub.escapeHtml(title) + '</h3>' +
+      (description ? '<p>' + Hub.escapeHtml(description) + '</p>' : "");
+    var body = document.createElement("div");
+    body.className = "theme-section-body";
+    section.appendChild(header);
+    section.appendChild(body);
+    sidebar.appendChild(section);
+    return body;
+  }
+
   function openThemeSidebar(store, profileName) {
     var sidebar = ensureThemeSidebar();
     sidebar.replaceChildren();
@@ -35,8 +56,16 @@ Hub.customize = (function () {
     var header = document.createElement("div");
     header.className = "theme-sidebar-header";
     header.innerHTML = '<h2>Theme</h2><button class="theme-sidebar-close" type="button">&times;</button>';
-    header.querySelector(".theme-sidebar-close").addEventListener("click", closeThemeSidebar);
+    var closeButton = header.querySelector(".theme-sidebar-close");
+    closeButton.addEventListener("click", closeThemeSidebar);
     sidebar.appendChild(header);
+
+    var intro = document.createElement("p");
+    intro.className = "theme-sidebar-intro";
+    intro.textContent = "Tune colors, background, shortcuts, and visual details for this dashboard.";
+    sidebar.appendChild(intro);
+
+    var appearanceSection = createThemeSection(sidebar, "Theme Preset", "Start from a palette, then decide whether it applies everywhere or only here.");
 
     /* Preset dropdown */
     var presetSection = document.createElement("div");
@@ -52,16 +81,20 @@ Hub.customize = (function () {
 
     var searchInput = presetRow.querySelector(".preset-search");
     var dropdown = presetRow.querySelector(".preset-dropdown");
+    function getPresetOptions() {
+      return Array.from(dropdown.querySelectorAll(".preset-option"));
+    }
 
     function renderPresetOptions(filter) {
       dropdown.replaceChildren();
       var filt = (filter || "").toLowerCase();
       var matches = Object.keys(Hub.THEME_PRESETS).filter(function (n) { return !filt || n.toLowerCase().includes(filt); });
-      matches.forEach(function (name) {
+      matches.forEach(function (name, idx) {
         var preset = Hub.THEME_PRESETS[name];
         var opt = document.createElement("button");
         opt.type = "button";
         opt.className = "preset-option";
+        opt.tabIndex = -1;
         opt.innerHTML =
           '<span class="preset-swatches">' +
             '<span class="preset-swatch" style="background:' + preset.bg + '"></span>' +
@@ -78,6 +111,32 @@ Hub.customize = (function () {
             if (val && val.startsWith("#")) inp.value = val;
           });
         });
+        opt.addEventListener("keydown", function (e) {
+          var opts = getPresetOptions();
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusPresetOption(idx < opts.length - 1 ? idx + 1 : 0);
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            focusPresetOption(idx > 0 ? idx - 1 : opts.length - 1);
+            return;
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            dropdown.classList.remove("is-open");
+            presetFocusIdx = -1;
+            searchInput.focus();
+          }
+        });
+        opt.addEventListener("focus", function () {
+          presetFocusIdx = idx;
+          getPresetOptions().forEach(function (btn, btnIdx) {
+            btn.classList.toggle("preset-option-focus", btnIdx === idx);
+            btn.tabIndex = btnIdx === idx ? 0 : -1;
+          });
+        });
         dropdown.appendChild(opt);
       });
       if (!matches.length) dropdown.innerHTML = '<div class="preset-empty">No matching themes</div>';
@@ -86,22 +145,27 @@ Hub.customize = (function () {
     var presetFocusIdx = -1;
 
     function focusPresetOption(idx) {
-      var opts = dropdown.querySelectorAll(".preset-option");
-      opts.forEach(function (o) { o.classList.remove("preset-option-focus"); });
+      var opts = getPresetOptions();
+      opts.forEach(function (o, optionIdx) {
+        o.classList.toggle("preset-option-focus", optionIdx === idx);
+        o.tabIndex = optionIdx === idx ? 0 : -1;
+      });
       if (idx < 0 || idx >= opts.length) { presetFocusIdx = -1; return; }
       presetFocusIdx = idx;
-      opts[idx].classList.add("preset-option-focus");
+      if (document.activeElement !== opts[idx]) opts[idx].focus();
       opts[idx].scrollIntoView({ block: "nearest" });
     }
 
     searchInput.addEventListener("focus", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); presetFocusIdx = -1; });
     searchInput.addEventListener("input", function () { renderPresetOptions(searchInput.value); dropdown.classList.add("is-open"); presetFocusIdx = -1; });
     searchInput.addEventListener("keydown", function (e) {
-      var opts = dropdown.querySelectorAll(".preset-option");
-      if (e.key === "ArrowDown") {
+      var opts = getPresetOptions();
+      if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey && dropdown.classList.contains("is-open"))) {
+        if (!opts.length) return;
         e.preventDefault();
         focusPresetOption(presetFocusIdx < opts.length - 1 ? presetFocusIdx + 1 : 0);
       } else if (e.key === "ArrowUp") {
+        if (!opts.length) return;
         e.preventDefault();
         focusPresetOption(presetFocusIdx > 0 ? presetFocusIdx - 1 : opts.length - 1);
       } else if (e.key === "Enter" && presetFocusIdx >= 0 && presetFocusIdx < opts.length) {
@@ -111,7 +175,7 @@ Hub.customize = (function () {
     });
     document.addEventListener("click", function (e) { if (!presetRow.contains(e.target)) dropdown.classList.remove("is-open"); });
     presetSection.appendChild(presetRow);
-    sidebar.appendChild(presetSection);
+    appearanceSection.appendChild(presetSection);
 
     /* Scope */
     var scopeWrap = document.createElement("div");
@@ -119,32 +183,47 @@ Hub.customize = (function () {
     scopeWrap.innerHTML =
       '<label class="theme-scope-label"><input type="radio" name="theme-scope" value="global" checked /> Global</label>' +
       '<label class="theme-scope-label"><input type="radio" name="theme-scope" value="profile" /> This profile only</label>';
-    sidebar.appendChild(scopeWrap);
+    appearanceSection.appendChild(scopeWrap);
 
     /* Color pickers */
     var colorKeys = Object.keys(Hub.DEFAULT_COLORS).filter(function (k) { return Hub.DEFAULT_COLORS[k].startsWith("#"); });
+    var colorSection = createThemeSection(sidebar, "Colors", "Grouped by purpose so it is easier to understand what each token affects.");
+    var colorGroups = [
+      { title: "Surfaces", keys: ["bg", "surface", "surfaceHover", "border", "borderStrong"] },
+      { title: "Text", keys: ["text", "textMuted", "textMutedStrong"] },
+      { title: "Accent", keys: ["accent", "accentAlt", "ok", "warn", "down"] },
+      { title: "Hints & Shortcuts", keys: ["hintBg", "hintText", "hintBorder", "hintAccentBg", "hintAccentText", "hintAccentBorder"] }
+    ];
     var grid = document.createElement("div");
-    grid.className = "theme-grid";
-    colorKeys.forEach(function (key) {
-      var label = document.createElement("label");
-      label.className = "theme-color-label";
-      label.innerHTML = '<span>' + Hub.escapeHtml(key) + '</span><input type="color" data-color-key="' + key + '" value="' + Hub.escapeHtml(Hub.DEFAULT_COLORS[key]) + '" />';
-      var input = label.querySelector("input");
-      var cssVar = Hub.CSS_VAR_MAP[key];
-      if (cssVar) {
-        var current = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-        if (current && current.startsWith("#")) input.value = current;
-      }
-      input.addEventListener("input", function () { if (cssVar) document.documentElement.style.setProperty(cssVar, input.value); });
-      grid.appendChild(label);
+    grid.className = "theme-color-groups";
+    colorGroups.forEach(function (group) {
+      var availableKeys = group.keys.filter(function (key) { return colorKeys.includes(key); });
+      if (!availableKeys.length) return;
+      var card = document.createElement("section");
+      card.className = "theme-color-group";
+      card.innerHTML = '<h4>' + Hub.escapeHtml(group.title) + '</h4>';
+      var cardGrid = document.createElement("div");
+      cardGrid.className = "theme-grid";
+      availableKeys.forEach(function (key) {
+        var label = document.createElement("label");
+        label.className = "theme-color-label";
+        label.innerHTML = '<span>' + Hub.escapeHtml(startCaseLabel(key)) + '</span><input type="color" data-color-key="' + key + '" value="' + Hub.escapeHtml(Hub.DEFAULT_COLORS[key]) + '" />';
+        var input = label.querySelector("input");
+        var cssVar = Hub.CSS_VAR_MAP[key];
+        if (cssVar) {
+          var current = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+          if (current && current.startsWith("#")) input.value = current;
+        }
+        input.addEventListener("input", function () { if (cssVar) document.documentElement.style.setProperty(cssVar, input.value); });
+        cardGrid.appendChild(label);
+      });
+      card.appendChild(cardGrid);
+      grid.appendChild(card);
     });
-    sidebar.appendChild(grid);
+    colorSection.appendChild(grid);
 
     /* Border / radius controls */
-    var styleLabel = document.createElement("p");
-    styleLabel.className = "customize-label";
-    styleLabel.textContent = "Borders & radius";
-    sidebar.appendChild(styleLabel);
+    var styleSection = createThemeSection(sidebar, "Shape & Borders", "Control the feel of cards and inputs without touching the palette.");
 
     var styleGrid = document.createElement("div");
     styleGrid.className = "style-controls";
@@ -170,13 +249,10 @@ Hub.customize = (function () {
       });
       styleGrid.appendChild(row);
     });
-    sidebar.appendChild(styleGrid);
+    styleSection.appendChild(styleGrid);
 
     /* Background image */
-    var bgLabel = document.createElement("p");
-    bgLabel.className = "customize-label";
-    bgLabel.textContent = "Background";
-    sidebar.appendChild(bgLabel);
+    var bgSection = createThemeSection(sidebar, "Background", "Use an image, video, or upload to shape the atmosphere behind the widgets.");
 
     var bgWrap = document.createElement("div");
     bgWrap.className = "bg-image-controls";
@@ -487,13 +563,35 @@ Hub.customize = (function () {
       bgWarn.style.display = "";
     };
 
-    sidebar.appendChild(bgWrap);
+    bgSection.appendChild(bgWrap);
+
+    /* Zen mode */
+    var zenSection = createThemeSection(sidebar, "Zen Mode", "Choose how quickly the interface fades away when you go idle.");
+
+    var zenSettings = { idleTimeoutMs: Hub.zen.getIdleTimeoutMs() };
+    var zenRow = document.createElement("label");
+    zenRow.className = "style-control-row";
+    zenRow.innerHTML = '<span>Idle timeout</span>';
+    var zenRange = document.createElement("input");
+    zenRange.type = "range";
+    zenRange.min = "1";
+    zenRange.max = "60";
+    zenRange.step = "1";
+    zenRange.value = String(Math.round(zenSettings.idleTimeoutMs / 1000));
+    var zenDisplay = document.createElement("span");
+    zenDisplay.className = "style-value";
+    zenDisplay.textContent = Math.round(zenSettings.idleTimeoutMs / 1000) + "s";
+    zenRange.addEventListener("input", function () {
+      zenSettings.idleTimeoutMs = Number(zenRange.value) * 1000;
+      zenDisplay.textContent = zenRange.value + "s";
+      Hub.zen.setIdleTimeoutMs(zenSettings.idleTimeoutMs, false);
+    });
+    zenRow.appendChild(zenRange);
+    zenRow.appendChild(zenDisplay);
+    zenSection.appendChild(zenRow);
 
     /* Custom CSS */
-    var cssLabel = document.createElement("p");
-    cssLabel.className = "customize-label";
-    cssLabel.textContent = "Custom CSS";
-    sidebar.appendChild(cssLabel);
+    var cssSection = createThemeSection(sidebar, "Custom CSS", "For final polish when the built-in controls are not enough.");
 
     var cssTextarea = document.createElement("textarea");
     cssTextarea.className = "custom-css-input";
@@ -501,9 +599,10 @@ Hub.customize = (function () {
     cssTextarea.spellcheck = false;
     store.get(Hub.STORAGE_CUSTOM_CSS_KEY).then(function (saved) { if (saved) cssTextarea.value = saved; });
     cssTextarea.addEventListener("input", function () { Hub.applyCustomCss(cssTextarea.value); });
-    sidebar.appendChild(cssTextarea);
+    cssSection.appendChild(cssTextarea);
 
     /* Actions */
+    var actionsSection = createThemeSection(sidebar, "Actions", "Save your changes, reset everything, or move settings between machines.");
     var actions = document.createElement("div");
     actions.className = "theme-actions";
     actions.innerHTML =
@@ -528,6 +627,7 @@ Hub.customize = (function () {
       delete bgToSave._isObjectUrl;
       delete bgToSave.mimeType;
       await Hub.saveBgImage(store, profileName, bgToSave);
+      await Hub.zen.setIdleTimeoutMs(zenSettings.idleTimeoutMs, true);
       closeThemeSidebar();
     });
 
@@ -641,7 +741,7 @@ Hub.customize = (function () {
       bgSurfaceDisplay.textContent = Math.round(currentBg.surfaceOpacity * 100) + "%";
       bgFitSelect.value = currentBg.fit;
     });
-    sidebar.appendChild(actions);
+    actionsSection.appendChild(actions);
 
     sidebar.classList.add("is-open");
     themeOverlay.classList.add("is-open");
@@ -649,7 +749,7 @@ Hub.customize = (function () {
     /* Keyboard navigation for theme sidebar */
     function getSidebarFocusable() {
       return Array.from(sidebar.querySelectorAll(
-        'input:not([type="file"]), select, textarea, button:not(.theme-sidebar-close)'
+        'input:not([type="file"]), select, textarea, button'
       )).filter(function (el) { return el.offsetParent !== null && el.style.display !== "none"; });
     }
 
@@ -684,8 +784,7 @@ Hub.customize = (function () {
 
     sidebar.addEventListener("keydown", onSidebarKey);
 
-    /* Auto-focus preset search on open */
-    requestAnimationFrame(function () { searchInput.focus(); });
+    requestAnimationFrame(function () { closeButton.focus(); });
   }
 
   return {

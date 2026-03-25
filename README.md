@@ -24,6 +24,12 @@ Built entirely with vanilla JavaScript — no frameworks, no build step, no depe
 - **Collapsible groups** — open/close state saved per profile
 - **No external dependencies** — pure HTML/CSS/JS, Manifest V3 extension
 
+## Tests
+
+- Install test-only tooling with `npm install`
+- Run the Jest suite with `npm test`
+- The extension still ships with no runtime build step or app dependencies; Node is only used for tests
+
 ## Installation
 
 1. Clone or download this repository
