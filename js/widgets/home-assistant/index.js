@@ -38,7 +38,7 @@ Hub.injectStyles("widget-home-assistant", `
 
 Hub.registry.register("home-assistant", {
   label: "Home Assistant",
-  icon: "\uD83C\uDFE0",
+  icon: "https://www.home-assistant.io/favicon.ico",
   manualRefresh: true,
 
   credentialFields: [

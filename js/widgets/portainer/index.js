@@ -32,7 +32,7 @@ Hub.injectStyles("widget-portainer", `
 
 Hub.registry.register("portainer", {
   label: "Portainer",
-  icon: "\uD83D\uDC33",
+  icon: "monitor",
   manualRefresh: true,
 
   credentialFields: [

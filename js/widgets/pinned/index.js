@@ -40,7 +40,7 @@ Hub.injectStyles("widget-pinned", `
 
 Hub.registry.register("pinned-links", {
   label: "Pinned Links",
-  icon: "\u2606",
+  icon: "star",
 
   render: function (container, config, state) {
     var items = config.items || [];

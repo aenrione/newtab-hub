@@ -21,7 +21,7 @@ Hub.injectStyles("widget-html", `
 
 Hub.registry.register("html", {
   label: "HTML",
-  icon: "\uD83D\uDCDD",
+  icon: "code",
 
   render: function (container, config) {
     container.className += " widget-html";

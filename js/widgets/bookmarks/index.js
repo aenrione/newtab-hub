@@ -52,7 +52,7 @@ Hub.injectStyles("widget-bookmarks", `
 
 Hub.registry.register("bookmarks", {
   label: "Bookmarks",
-  icon: "\uD83D\uDD16",
+  icon: "bookmark",
 
   render: function (container, config) {
     container.innerHTML =

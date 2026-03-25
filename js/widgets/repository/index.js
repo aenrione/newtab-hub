@@ -58,7 +58,8 @@ Hub.injectStyles("widget-repository", `
 
 Hub.registry.register("repository", {
   label: "Repository",
-  icon: "\uD83D\uDCC1",
+  icon: "folder",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "token", label: "GitHub PAT (optional)", type: "password" }
@@ -92,10 +93,10 @@ Hub.registry.register("repository", {
       var commitsLimit = Math.min(config.commitsLimit || 5, 20);
 
       var [repoData, prs, issues, commits] = await Promise.all([
-        repoCachedFetch(base, headers, store),
-        prsLimit > 0 ? repoCachedFetch(base + "/pulls?state=open&per_page=" + prsLimit + "&sort=updated", headers, store) : Promise.resolve([]),
-        issuesLimit > 0 ? repoCachedFetch(base + "/issues?state=open&per_page=" + (issuesLimit + prsLimit) + "&filter=all", headers, store) : Promise.resolve([]),
-        commitsLimit > 0 ? repoCachedFetch(base + "/commits?per_page=" + commitsLimit, headers, store) : Promise.resolve([])
+        repoCachedFetch(base, headers, store, config._id),
+        prsLimit > 0 ? repoCachedFetch(base + "/pulls?state=open&per_page=" + prsLimit + "&sort=updated", headers, store, config._id) : Promise.resolve([]),
+        issuesLimit > 0 ? repoCachedFetch(base + "/issues?state=open&per_page=" + (issuesLimit + prsLimit) + "&filter=all", headers, store, config._id) : Promise.resolve([]),
+        commitsLimit > 0 ? repoCachedFetch(base + "/commits?per_page=" + commitsLimit, headers, store, config._id) : Promise.resolve([])
       ]);
 
       if (token !== state.renderToken) return;
@@ -199,8 +200,8 @@ Hub.registry.register("repository", {
 
 /* ── Helpers ── */
 
-function repoCachedFetch(url, headers, store) {
-  var cacheKey = "repo::" + url;
+function repoCachedFetch(url, headers, store, cacheScope) {
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "repo::" + url);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return Promise.resolve(cached);
   return Hub.fetchWithTimeout(url, { headers: headers }, 12000)

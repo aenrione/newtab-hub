@@ -75,7 +75,8 @@ Hub.injectStyles("widget-github-releases", `
 
 Hub.registry.register("github-releases", {
   label: "GitHub Releases",
-  icon: "\uD83D\uDE80",
+  icon: "https://github.com/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "token", label: "GitHub PAT (optional)", type: "password" }
@@ -107,7 +108,7 @@ Hub.registry.register("github-releases", {
       var allReleases = [];
       var results = await Promise.allSettled(repos.map(function (repo) {
         var url = "https://api.github.com/repos/" + encodeURIComponent(repo) + "/releases?per_page=3";
-        var cacheKey = "gh-releases::" + repo;
+        var cacheKey = Hub.cache.scopeKey(config._id, "gh-releases::" + repo);
         var cached = Hub.cache.get(cacheKey);
         if (cached !== null) return Promise.resolve(cached);
         return Hub.fetchWithTimeout(url, { headers: headers }, 12000)

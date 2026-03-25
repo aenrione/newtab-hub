@@ -40,7 +40,7 @@ Hub.injectStyles("widget-monitor", `
 
 Hub.registry.register("monitor", {
   label: "Monitor",
-  icon: "\uD83D\uDFE2",
+  icon: "monitor",
 
   render: function (container, config) {
     container.innerHTML =

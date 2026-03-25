@@ -44,7 +44,7 @@ Hub.injectStyles("widget-reddit", `
 
 Hub.registry.register("reddit", {
   label: "Reddit",
-  icon: "\uD83D\uDC31",
+  icon: "https://www.reddit.com/favicon.ico",
 
   render: function (container, config) {
     var sub = (config.subreddit || "").replace(/^r\//, "") || "…";

@@ -32,7 +32,7 @@ Hub.injectStyles("widget-transmission", `
 
 Hub.registry.register("transmission", {
   label: "Transmission",
-  icon: "\uD83D\uDCE1",
+  icon: "arrowDownRight",
   manualRefresh: true,
 
   credentialFields: [

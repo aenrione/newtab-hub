@@ -39,7 +39,7 @@ Hub.injectStyles("widget-lobsters", `
 
 Hub.registry.register("lobsters", {
   label: "Lobsters",
-  icon: "\uD83E\uDD9E",
+  icon: "https://lobste.rs/favicon.ico",
 
   render: function (container, config) {
     container.innerHTML =

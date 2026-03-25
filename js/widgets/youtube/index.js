@@ -53,7 +53,8 @@ Hub.injectStyles("widget-youtube", `
 
 Hub.registry.register("youtube", {
   label: "YouTube",
-  icon: "\u25B6",
+  icon: "https://www.youtube.com/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "apiKey", label: "YouTube API Key", type: "password" }
@@ -91,7 +92,7 @@ Hub.registry.register("youtube", {
           "?channelId=" + encodeURIComponent(channelId) +
           "&type=video&order=date&maxResults=" + perChannel +
           "&part=snippet&key=" + encodeURIComponent(creds.apiKey);
-        return Hub.cachedFetchJSON(url, "default", store);
+        return Hub.cachedFetchJSON(url, "default", store, null, Hub.cache.scopeKey(config._id, "youtube::" + url));
       }));
 
       results.forEach(function (r) {

@@ -32,7 +32,7 @@ Hub.injectStyles("widget-overseerr", `
 
 Hub.registry.register("overseerr", {
   label: "Overseerr",
-  icon: "\uD83C\uDFAC",
+  icon: "film",
   manualRefresh: true,
 
   credentialFields: [

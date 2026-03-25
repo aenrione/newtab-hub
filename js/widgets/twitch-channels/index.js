@@ -53,7 +53,8 @@ Hub.injectStyles("widget-twitch-channels", `
 
 Hub.registry.register("twitch-channels", {
   label: "Twitch Channels",
-  icon: "\uD83C\uDFAE",
+  icon: "https://www.twitch.tv/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "clientId", label: "Twitch Client ID", type: "password" },
@@ -90,8 +91,8 @@ Hub.registry.register("twitch-channels", {
 
     try {
       var [streamsData, usersData] = await Promise.all([
-        twitchCachedFetch("https://api.twitch.tv/helix/streams?" + loginParams, headers, store),
-        twitchCachedFetch("https://api.twitch.tv/helix/users?" + loginParams, headers, store)
+        twitchCachedFetch("https://api.twitch.tv/helix/streams?" + loginParams, headers, store, config._id),
+        twitchCachedFetch("https://api.twitch.tv/helix/users?" + loginParams, headers, store, config._id)
       ]);
 
       if (token !== state.renderToken) return;
@@ -255,8 +256,8 @@ function twitchViewers(n) {
   return n + " viewers";
 }
 
-function twitchCachedFetch(url, headers, store) {
-  var cacheKey = "twitch::" + url;
+function twitchCachedFetch(url, headers, store, cacheScope) {
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "twitch::" + url);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return Promise.resolve(cached);
   return Hub.fetchWithTimeout(url, { headers: headers }, 10000)

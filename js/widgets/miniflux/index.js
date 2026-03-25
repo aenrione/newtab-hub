@@ -32,7 +32,7 @@ Hub.injectStyles("widget-miniflux", `
 
 Hub.registry.register("miniflux", {
   label: "Miniflux",
-  icon: "\uD83D\uDCF0",
+  icon: "rss",
   manualRefresh: true,
 
   credentialFields: [

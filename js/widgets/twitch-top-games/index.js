@@ -38,7 +38,8 @@ Hub.injectStyles("widget-twitch-top-games", `
 
 Hub.registry.register("twitch-top-games", {
   label: "Twitch Top Games",
-  icon: "\uD83C\uDFAE",
+  icon: "https://www.twitch.tv/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "clientId", label: "Twitch Client ID", type: "password" },
@@ -68,7 +69,7 @@ Hub.registry.register("twitch-top-games", {
     };
 
     try {
-      var cacheKey = "twitch-top-games::" + limit;
+      var cacheKey = Hub.cache.scopeKey(config._id, "twitch-top-games::" + limit);
       var data = Hub.cache.get(cacheKey);
       if (!data) {
         var res = await Hub.fetchWithTimeout(

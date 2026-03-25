@@ -12,7 +12,7 @@ Hub.injectStyles("widget-iframe", `
 
 Hub.registry.register("iframe", {
   label: "iFrame",
-  icon: "\uD83D\uDDBC",
+  icon: "eye",
 
   render: function (container, config) {
     var title = config.title || "iFrame";

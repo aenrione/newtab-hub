@@ -184,6 +184,10 @@ Hub.keyboard = (function () {
 
   function renderKeyBadges() {
     document.querySelectorAll(".chord-key-badge").forEach(function (el) { el.remove(); });
+    document.querySelectorAll(".widget-refresh-btn[data-chord-key]").forEach(function (el) {
+      el.removeAttribute("data-chord-key");
+      el.removeAttribute("aria-keyshortcuts");
+    });
 
     Object.keys(widgetKeyMap).forEach(function (key) {
       var entry = widgetKeyMap[key];
@@ -192,7 +196,14 @@ Hub.keyboard = (function () {
       badge.textContent = key.toUpperCase();
 
       var target = entry.container.querySelector(".group-toggle, .widget-header");
-      if (target) target.appendChild(badge);
+      if (!target) return;
+      var actions = target.querySelector(".widget-header-actions");
+      var refreshBtn = actions && actions.querySelector(".widget-refresh-btn");
+      if (refreshBtn) {
+        refreshBtn.setAttribute("data-chord-key", key.toUpperCase());
+        refreshBtn.setAttribute("aria-keyshortcuts", key);
+      }
+      (actions || target).appendChild(badge);
     });
   }
 

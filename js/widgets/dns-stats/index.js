@@ -49,7 +49,8 @@ Hub.injectStyles("widget-dns-stats", `
 
 Hub.registry.register("dns-stats", {
   label: "DNS Stats",
-  icon: "\uD83D\uDEE1\uFE0F",
+  icon: "shield",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "apiKey", label: "API Key / Password", type: "password" }
@@ -77,11 +78,11 @@ Hub.registry.register("dns-stats", {
     try {
       var stats;
       if (service === "adguard") {
-        stats = await dnsAdguard(instanceUrl, creds, store);
+        stats = await dnsAdguard(instanceUrl, creds, store, config._id);
       } else if (service === "pihole6") {
-        stats = await dnsPiholeV6(instanceUrl, creds, store);
+        stats = await dnsPiholeV6(instanceUrl, creds, store, config._id);
       } else {
-        stats = await dnsPihole(instanceUrl, creds, store);
+        stats = await dnsPihole(instanceUrl, creds, store, config._id);
       }
 
       if (token !== state.renderToken) return;
@@ -144,10 +145,10 @@ Hub.registry.register("dns-stats", {
 
 /* ── Fetchers ── */
 
-async function dnsPihole(base, creds, store) {
+async function dnsPihole(base, creds, store, cacheScope) {
   var token = creds.apiKey || "";
   var url = base + "/admin/api.php?summaryRaw" + (token ? "&auth=" + encodeURIComponent(token) : "");
-  var cacheKey = "dns-pihole::" + base;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "dns-pihole::" + base);
   var cached = Hub.cache.get(cacheKey);
   if (!cached) {
     var res = await Hub.fetchWithTimeout(url, {}, 8000);
@@ -163,9 +164,9 @@ async function dnsPihole(base, creds, store) {
   };
 }
 
-async function dnsPiholeV6(base, creds, store) {
+async function dnsPiholeV6(base, creds, store, cacheScope) {
   var password = creds.apiKey || "";
-  var cacheKey = "dns-pihole6::" + base;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "dns-pihole6::" + base);
   var cached = Hub.cache.get(cacheKey);
   if (!cached) {
     // Authenticate to get a session ID
@@ -206,12 +207,12 @@ async function dnsPiholeV6(base, creds, store) {
   };
 }
 
-async function dnsAdguard(base, creds, store) {
+async function dnsAdguard(base, creds, store, cacheScope) {
   var headers = {};
   if (creds.apiKey && creds.apiKey.includes(":")) {
     headers["Authorization"] = "Basic " + btoa(creds.apiKey);
   }
-  var cacheKey = "dns-adguard::" + base;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "dns-adguard::" + base);
   var cached = Hub.cache.get(cacheKey);
   if (!cached) {
     var res = await Hub.fetchWithTimeout(base + "/control/stats", { headers: headers }, 8000);

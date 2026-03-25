@@ -32,7 +32,8 @@ Hub.injectStyles("widget-radarr", `
 
 Hub.registry.register("radarr", {
   label: "Radarr",
-  icon: "\uD83C\uDFAC",
+  icon: "film",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "apiKey", label: "API Key", type: "password" }
@@ -64,8 +65,8 @@ Hub.registry.register("radarr", {
     var movies, queue;
     try {
       var results = await Promise.all([
-        Hub.cachedFetchJSON(base + "/api/v3/movie", "radarr", state.store, opts),
-        Hub.cachedFetchJSON(base + "/api/v3/queue/status", "radarr", state.store, opts)
+        Hub.cachedFetchJSON(base + "/api/v3/movie", "radarr", state.store, opts, Hub.cache.scopeKey(config._id, "radarr::" + base + "/api/v3/movie")),
+        Hub.cachedFetchJSON(base + "/api/v3/queue/status", "radarr", state.store, opts, Hub.cache.scopeKey(config._id, "radarr::" + base + "/api/v3/queue/status"))
       ]);
       movies = results[0];
       queue = results[1];

@@ -36,7 +36,7 @@ Hub.injectStyles("widget-feeds", `
 
 Hub.registry.register("feeds", {
   label: "Feeds",
-  icon: "\u25A3",
+  icon: "rss",
 
   render: function (container, config) {
     container.innerHTML =

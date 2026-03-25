@@ -74,6 +74,23 @@ Hub.cache = (function () {
     if (store) scheduleSave(store);
   }
 
+  function scopeKey(scope, key) {
+    if (!scope) return key;
+    return "scope::" + scope + "::" + key;
+  }
+
+  function clearScope(scope, store) {
+    if (!scope) return;
+    var prefix = scopeKey(scope, "");
+    var changed = false;
+    Object.keys(mem).forEach(function (key) {
+      if (key.indexOf(prefix) !== 0) return;
+      delete mem[key];
+      changed = true;
+    });
+    if (changed && store) scheduleSave(store);
+  }
+
   /** Clear all cache */
   async function clear(store) {
     mem = {};
@@ -84,6 +101,8 @@ Hub.cache = (function () {
     init: init,
     get: get,
     set: set,
+    scopeKey: scopeKey,
+    clearScope: clearScope,
     clear: clear,
     TTL: TTL
   };
@@ -98,8 +117,8 @@ Hub.cache = (function () {
  * @param {object} [opts] - fetch options
  * @returns {Promise<string>} response text
  */
-Hub.cachedFetch = async function (url, category, store, opts) {
-  var cacheKey = category + "::" + url;
+Hub.cachedFetch = async function (url, category, store, opts, cacheKeyOverride) {
+  var cacheKey = cacheKeyOverride || (category + "::" + url);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return cached;
 
@@ -114,8 +133,8 @@ Hub.cachedFetch = async function (url, category, store, opts) {
 /**
  * Cached JSON fetch wrapper.
  */
-Hub.cachedFetchJSON = async function (url, category, store, opts) {
-  var cacheKey = category + "::" + url;
+Hub.cachedFetchJSON = async function (url, category, store, opts, cacheKeyOverride) {
+  var cacheKey = cacheKeyOverride || (category + "::" + url);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return cached;
 

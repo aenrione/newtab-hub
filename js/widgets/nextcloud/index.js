@@ -32,7 +32,7 @@ Hub.injectStyles("widget-nextcloud", `
 
 Hub.registry.register("nextcloud", {
   label: "Nextcloud",
-  icon: "\u2601\uFE0F",
+  icon: "cloud",
   manualRefresh: true,
 
   credentialFields: [

@@ -27,7 +27,8 @@ Hub.injectStyles("widget-sonarr", `
 
 Hub.registry.register("sonarr", {
   label: "Sonarr",
-  icon: "clock",
+  icon: "tv",
+  manualRefresh: true,
 
   defaultConfig: function () {
     return { title: "On Deck", url: "http://localhost:8989", days: 7 };
@@ -65,8 +66,8 @@ Hub.registry.register("sonarr", {
       var opts = { headers: { "X-Api-Key": creds.apiKey } };
       var calUrl = base + "/api/v3/calendar?start=" + start + "&end=" + end;
       var parsed = await Promise.all([
-        Hub.cachedFetchJSON(calUrl, "sonarr", store, opts),
-        Hub.cachedFetchJSON(base + "/api/v3/series", "sonarr", store, opts)
+        Hub.cachedFetchJSON(calUrl, "sonarr", store, opts, Hub.cache.scopeKey(config._id, "sonarr::" + calUrl)),
+        Hub.cachedFetchJSON(base + "/api/v3/series", "sonarr", store, opts, Hub.cache.scopeKey(config._id, "sonarr::" + base + "/api/v3/series"))
       ]);
       episodes = parsed[0];
       seriesMap = {};

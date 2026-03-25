@@ -32,7 +32,7 @@ Hub.injectStyles("widget-plex", `
 
 Hub.registry.register("plex", {
   label: "Plex",
-  icon: "\uD83C\uDFAC",
+  icon: "https://www.plex.tv/favicon.ico",
   manualRefresh: true,
 
   credentialFields: [

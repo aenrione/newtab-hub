@@ -32,7 +32,7 @@ Hub.injectStyles("widget-pihole", `
 
 Hub.registry.register("pihole", {
   label: "Pi-hole",
-  icon: "\uD83D\uDD73\uFE0F",
+  icon: "shield",
   manualRefresh: true,
 
   credentialFields: [

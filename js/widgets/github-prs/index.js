@@ -87,7 +87,8 @@ Hub.injectStyles("widget-github-prs", `
 
 Hub.registry.register("github-prs", {
   label: "GitHub PRs",
-  icon: "\u2387",
+  icon: "https://github.com/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "token", label: "GitHub PAT", type: "password" }
@@ -116,8 +117,8 @@ Hub.registry.register("github-prs", {
     try {
       if (filter === "all") {
         var results = await Promise.all([
-          ghFetch(buildGhQuery("review-requested", repos), limit, creds.token, state.store),
-          ghFetch(buildGhQuery("authored", repos), limit, creds.token, state.store)
+          ghFetch(buildGhQuery("review-requested", repos), limit, creds.token, state.store, config._id),
+          ghFetch(buildGhQuery("authored", repos), limit, creds.token, state.store, config._id)
         ]);
         var seen = {};
         var merged = [];
@@ -128,7 +129,7 @@ Hub.registry.register("github-prs", {
         merged.sort(function (a, b) { return new Date(b.updated_at) - new Date(a.updated_at); });
         data = merged.slice(0, limit);
       } else {
-        data = await ghFetch(buildGhQuery(filter, repos), limit, creds.token, state.store);
+        data = await ghFetch(buildGhQuery(filter, repos), limit, creds.token, state.store, config._id);
       }
     } catch (err) {
       if (token !== state.renderToken) return;
@@ -251,13 +252,13 @@ Hub.registry.register("github-prs", {
 
 /* ── Helpers ── */
 
-async function ghFetch(query, limit, tokenStr, store) {
+async function ghFetch(query, limit, tokenStr, store, cacheScope) {
   var url = "https://api.github.com/search/issues" +
     "?q=" + encodeURIComponent(query) +
     "&per_page=" + limit +
     "&sort=updated&order=desc";
 
-  var cacheKey = "gh-prs::" + query + "::" + limit;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "gh-prs::" + query + "::" + limit);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return cached;
 

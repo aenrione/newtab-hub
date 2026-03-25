@@ -32,7 +32,7 @@ Hub.injectStyles("widget-netdata", `
 
 Hub.registry.register("netdata", {
   label: "Netdata",
-  icon: "\uD83D\uDCCA",
+  icon: "trendingUp",
   manualRefresh: true,
 
   defaultConfig: function () {

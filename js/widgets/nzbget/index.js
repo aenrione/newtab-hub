@@ -32,7 +32,7 @@ Hub.injectStyles("widget-nzbget", `
 
 Hub.registry.register("nzbget", {
   label: "NZBGet",
-  icon: "\u2B07\uFE0F",
+  icon: "arrowDownRight",
   manualRefresh: true,
 
   credentialFields: [

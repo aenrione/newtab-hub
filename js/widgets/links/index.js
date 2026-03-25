@@ -73,7 +73,7 @@ Hub.injectStyles("widget-links", `
 
 Hub.registry.register("link-group", {
   label: "Link Group",
-  icon: "\u2630",
+  icon: "list",
 
   render: function (container, config, state) {
     var title = config.title || "Links";

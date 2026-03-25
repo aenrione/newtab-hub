@@ -13,7 +13,7 @@ Hub.injectStyles("widget-clock", `
 
 Hub.registry.register("clock", {
   label: "Clock",
-  icon: "\u231A",
+  icon: "clock",
 
   render: function (container, config) {
     var now = new Date();

@@ -32,7 +32,7 @@ Hub.injectStyles("widget-speedtest-tracker", `
 
 Hub.registry.register("speedtest-tracker", {
   label: "Speedtest Tracker",
-  icon: "\uD83D\uDCF6",
+  icon: "trendingUp",
   manualRefresh: true,
 
   credentialFields: [

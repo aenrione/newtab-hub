@@ -121,7 +121,8 @@ Hub.injectStyles("widget-grafana", `
 
 Hub.registry.register("grafana", {
   label: "Grafana",
-  icon: "\uD83D\uDCC8",
+  icon: "https://grafana.com/favicon.ico",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "token", label: "Service Account Token", type: "password" }
@@ -161,9 +162,9 @@ Hub.registry.register("grafana", {
 
     try {
       if (mode === "alerts") {
-        await grafanaLoadAlerts(bodyEl, instanceUrl, headers, config, store, state, token);
+        await grafanaLoadAlerts(bodyEl, instanceUrl, headers, config, store, state, token, config._id);
       } else if (mode === "metrics") {
-        await grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, token, state);
+        await grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, token, state, config._id);
       }
     } catch (err) {
       if (token !== state.renderToken) return;
@@ -234,9 +235,9 @@ Hub.registry.register("grafana", {
    ALERTS
 ════════════════════════════════════════════ */
 
-async function grafanaLoadAlerts(bodyEl, instanceUrl, headers, config, store, state, token) {
+async function grafanaLoadAlerts(bodyEl, instanceUrl, headers, config, store, state, token, cacheScope) {
   var url = instanceUrl + "/api/alertmanager/grafana/api/v2/alerts";
-  var cacheKey = "grafana-alerts::" + instanceUrl;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "grafana-alerts::" + instanceUrl);
   var data = Hub.cache.get(cacheKey);
   if (!data) {
     var res = await Hub.fetchWithTimeout(url, { headers: headers }, 10000);
@@ -320,7 +321,7 @@ async function grafanaLoadAlerts(bodyEl, instanceUrl, headers, config, store, st
    METRICS
 ════════════════════════════════════════════ */
 
-async function grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, token, state) {
+async function grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, token, state, cacheScope) {
   var metrics = (config.metrics || []).filter(function (m) { return m.datasourceUid && m.expr; });
   if (!metrics.length) {
     bodyEl.innerHTML = '<div class="empty-state">Add metrics in the widget editor.</div>';
@@ -328,7 +329,7 @@ async function grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, t
   }
 
   var results = await Promise.allSettled(metrics.map(function (m) {
-    return grafanaQueryMetric(instanceUrl, headers, m, store);
+    return grafanaQueryMetric(instanceUrl, headers, m, store, cacheScope);
   }));
 
   if (token !== state.renderToken) return;
@@ -362,7 +363,7 @@ async function grafanaLoadMetrics(bodyEl, instanceUrl, headers, config, store, t
   bodyEl.replaceChildren(gridEl);
 }
 
-async function grafanaQueryMetric(instanceUrl, headers, metric, store) {
+async function grafanaQueryMetric(instanceUrl, headers, metric, store, cacheScope) {
   var url = instanceUrl + "/api/ds/query?ds_type=prometheus";
   var body = JSON.stringify({
     queries: [{
@@ -377,7 +378,7 @@ async function grafanaQueryMetric(instanceUrl, headers, metric, store) {
     to: "now"
   });
 
-  var cacheKey = "grafana-metric::" + instanceUrl + "::" + metric.datasourceUid + "::" + metric.expr;
+  var cacheKey = Hub.cache.scopeKey(cacheScope, "grafana-metric::" + instanceUrl + "::" + metric.datasourceUid + "::" + metric.expr);
   var cached = Hub.cache.get(cacheKey);
   if (cached !== null) return cached;
 

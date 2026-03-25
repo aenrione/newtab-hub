@@ -73,7 +73,7 @@ Hub.injectStyles("widget-todo", `
 
 Hub.registry.register("todo", {
   label: "Todo",
-  icon: "\u2611",
+  icon: "checkSquare",
 
   render: function (container, config, state) {
     var widgetId = container.closest("[data-widget-id]").dataset.widgetId;

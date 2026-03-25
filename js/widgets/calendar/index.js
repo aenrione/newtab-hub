@@ -58,7 +58,7 @@ Hub.injectStyles("widget-calendar", `
 
 Hub.registry.register("calendar", {
   label: "Calendar",
-  icon: "\uD83D\uDCC5",
+  icon: "calendar",
 
   render: function (container, config) {
     container.innerHTML =

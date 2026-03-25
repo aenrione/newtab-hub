@@ -33,7 +33,7 @@ Hub.injectStyles("widget-hacker-news", `
 
 Hub.registry.register("hacker-news", {
   label: "Hacker News",
-  icon: "\u25B2",
+  icon: "https://news.ycombinator.com/favicon.ico",
 
   render: function (container, config) {
     container.innerHTML =

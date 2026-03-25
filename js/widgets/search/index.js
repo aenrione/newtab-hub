@@ -139,7 +139,7 @@ Hub.searchWidget.sanitizeFocusKeyInput = sanitizeFocusKeyInput;
 
 Hub.registry.register("search", {
   label: "Search",
-  icon: "/",
+  icon: "search",
 
   render: function (container, config) {
     config = normalizeSearchWidgetConfig(config);

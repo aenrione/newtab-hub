@@ -32,7 +32,7 @@ Hub.injectStyles("widget-group", `
 
 Hub.registry.register("group", {
   label: "Group (Tabs)",
-  icon: "\uD83D\uDDC2\uFE0F",
+  icon: "list",
 
   render: function (container, config, state) {
     var tabs = config.tabs || [];

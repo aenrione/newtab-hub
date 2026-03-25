@@ -42,7 +42,8 @@ Hub.injectStyles("widget-change-detection", `
 
 Hub.registry.register("change-detection", {
   label: "Change Detection",
-  icon: "\uD83D\uDD04",
+  icon: "eye",
+  manualRefresh: true,
 
   credentialFields: [
     { key: "apiKey", label: "API Key", type: "password" }
@@ -73,7 +74,7 @@ Hub.registry.register("change-detection", {
     var store = state.store;
 
     try {
-      var cacheKey = "cd::" + url;
+      var cacheKey = Hub.cache.scopeKey(config._id, "cd::" + url);
       var data = Hub.cache.get(cacheKey);
       if (!data) {
         var res = await Hub.fetchWithTimeout(url, {

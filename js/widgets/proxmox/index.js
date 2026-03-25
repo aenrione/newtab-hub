@@ -32,7 +32,7 @@ Hub.injectStyles("widget-proxmox", `
 
 Hub.registry.register("proxmox", {
   label: "Proxmox",
-  icon: "\uD83D\uDDA5",
+  icon: "monitor",
   manualRefresh: true,
 
   credentialFields: [

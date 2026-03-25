@@ -32,7 +32,7 @@ Hub.injectStyles("widget-prowlarr", `
 
 Hub.registry.register("prowlarr", {
   label: "Prowlarr",
-  icon: "\uD83D\uDD0D",
+  icon: "search",
   manualRefresh: true,
 
   credentialFields: [

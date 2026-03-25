@@ -54,7 +54,7 @@ Hub.injectStyles("widget-custom-api", `
 
 Hub.registry.register("custom-api", {
   label: "Custom API",
-  icon: "\uD83D\uDD0C",
+  icon: "plug",
 
   render: function (container, config) {
     container.className += " widget-custom-api";

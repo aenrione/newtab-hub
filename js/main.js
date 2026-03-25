@@ -19,6 +19,7 @@
     searchWidgetConfigs: {},
     searchFocusWidgetIds: {},
     autoFocusPausedUntil: 0,
+    refreshingWidgets: {},
     _collapsedGroups: new Set(),
     _onToggleGroup: null
   };
@@ -376,12 +377,135 @@
 
   var widgetElements = {};
 
+  function getWidgetById(widgetId) {
+    return resolvedWidgets().find(function (w) { return w.id === widgetId; }) || null;
+  }
+
+  function getWidgetTitle(widget) {
+    var plugin = widget ? Hub.registry.get(widget.type) : null;
+    return (widget && widget.config && widget.config.title) || (plugin && plugin.label) || (widget && widget.type) || "Widget";
+  }
+
+  function isWidgetManualRefreshable(widget) {
+    var plugin = widget ? Hub.registry.get(widget.type) : null;
+    return !!(widget && plugin && plugin.load && plugin.manualRefresh);
+  }
+
+  function setWidgetRefreshState(el, widgetId, refreshing) {
+    if (!el) return;
+    var btn = el.querySelector('.widget-refresh-btn[data-widget-id="' + widgetId + '"]');
+    if (!btn) return;
+    btn.disabled = !!refreshing;
+    btn.classList.toggle("is-refreshing", !!refreshing);
+    btn.setAttribute("aria-busy", refreshing ? "true" : "false");
+  }
+
+  function ensureWidgetHeaderControls(el, widget) {
+    if (!el || !widget) return;
+    var header = el.querySelector(".widget-header");
+    if (!header) return;
+
+    var titleEl = header.querySelector("h1, h2, h3");
+    var actions = header.querySelector(".widget-header-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "widget-header-actions";
+    }
+
+    Array.from(header.children).forEach(function (child) {
+      if (child === titleEl || child === actions) return;
+      actions.appendChild(child);
+    });
+
+    if (!actions.parentNode) header.appendChild(actions);
+
+    if (isWidgetManualRefreshable(widget) && !actions.querySelector('.widget-refresh-btn[data-widget-id="' + widget.id + '"]')) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "widget-refresh-btn";
+      btn.dataset.widgetId = widget.id;
+      btn.dataset.focusable = "true";
+      btn.dataset.title = "Refresh";
+      btn.setAttribute("aria-label", 'Refresh ' + getWidgetTitle(widget));
+      btn.title = "Refresh data";
+      btn.innerHTML = Hub.icons.refreshCw;
+      actions.insertBefore(btn, actions.firstChild || null);
+    }
+
+    setWidgetRefreshState(el, widget.id, !!state.refreshingWidgets[widget.id]);
+  }
+
+  function renderSingleWidget(widget, el) {
+    if (!el) return;
+    var plugin = Hub.registry.get(widget.type);
+    if (!plugin || !plugin.render) return;
+
+    state._collapsedGroups = new Set(state.collapsedGroups[state.activeProfile] || []);
+    state._onToggleGroup = function (title, isOpen) {
+      var s = new Set(state.collapsedGroups[state.activeProfile] || []);
+      if (isOpen) s.delete(title); else s.add(title);
+      state.collapsedGroups[state.activeProfile] = Array.from(s);
+      state.store.set(Hub.STORAGE_COLLAPSED_KEY, state.collapsedGroups);
+    };
+
+    try {
+      plugin.render(el, Object.assign({}, widget.config || {}, { _id: widget.id }), state);
+      ensureWidgetHeaderControls(el, widget);
+      ensureScrollableWidgetBody(el);
+    } catch (err) {
+      renderWidgetError(el, widget, "Failed to render widget.", err);
+    }
+  }
+
+  async function loadSingleWidget(widget, el, token) {
+    if (!el) return;
+    var plugin = Hub.registry.get(widget.type);
+    if (!plugin || !plugin.load) return;
+    try {
+      await plugin.load(el, Object.assign({}, widget.config || {}, { _id: widget.id }), state, token);
+    } catch (err) {
+      if (token !== state.renderToken) return;
+      renderWidgetError(el, widget, "Failed to load widget data.", err);
+    }
+  }
+
   function renderWidgetError(el, widget, message, err) {
-    var title = (widget.config && widget.config.title) || (Hub.registry.get(widget.type) || {}).label || widget.type || "Widget";
+    var title = getWidgetTitle(widget);
     el.innerHTML =
       '<div class="widget-header"><h2>' + Hub.escapeHtml(title) + '</h2></div>' +
       '<div class="empty-state">' + Hub.escapeHtml(message) + '</div>';
+    ensureWidgetHeaderControls(el, widget);
+    ensureScrollableWidgetBody(el);
     if (err) console.error("Widget failure", widget.type, widget.id, err);
+  }
+
+  function ensureScrollableWidgetBody(el) {
+    if (!el || el.dataset.widgetType === "search") return;
+
+    var scrollBody = null;
+    var contentChildren = [];
+    Array.from(el.children).forEach(function (child) {
+      if (child.classList.contains("widget-edit-controls") || child.classList.contains("widget-resize-handle")) return;
+      if (child.classList.contains("widget-header")) return;
+      if (child.classList.contains("widget-scroll-body")) {
+        scrollBody = child;
+        return;
+      }
+      contentChildren.push(child);
+    });
+
+    if (!scrollBody && !contentChildren.length) return;
+
+    if (!scrollBody) {
+      scrollBody = document.createElement("div");
+      scrollBody.className = "widget-scroll-body";
+      var resizeHandle = el.querySelector(".widget-resize-handle");
+      el.insertBefore(scrollBody, resizeHandle || null);
+    }
+
+    contentChildren.forEach(function (child) {
+      scrollBody.appendChild(child);
+    });
   }
 
   function buildWidgetEl(w) {
@@ -401,6 +525,26 @@
     return el;
   }
 
+  function getWidgetMinSize(widget) {
+    if (!Hub.registry.getMinSize) return null;
+    return Hub.registry.getMinSize(widget.type, widget.config || {});
+  }
+
+  function applyWidgetMinSize(widget) {
+    var minSize = getWidgetMinSize(widget);
+    var next = Object.assign({}, widget);
+    next.minWidth = minSize ? minSize.cols : 1;
+    next.minHeight = minSize ? minSize.rows : 1;
+    if (minSize) {
+      next.width = Math.max(minSize.cols, next.width || 4);
+      next.height = Math.max(minSize.rows, next.height || 1);
+    } else {
+      next.width = next.width || 4;
+      next.height = next.height || 1;
+    }
+    return next;
+  }
+
   function renderAllWidgets() {
     var widgets = resolvedWidgets();
     state.pinned = [];
@@ -408,24 +552,7 @@
 
     widgets.forEach(function (w) {
       var el = widgetElements[w.id];
-      if (!el) return;
-      var plugin = Hub.registry.get(w.type);
-      if (!plugin || !plugin.render) return;
-
-      /* Prepare state for link-group collapsed handling */
-      state._collapsedGroups = new Set(state.collapsedGroups[state.activeProfile] || []);
-      state._onToggleGroup = function (title, isOpen) {
-        var s = new Set(state.collapsedGroups[state.activeProfile] || []);
-        if (isOpen) s.delete(title); else s.add(title);
-        state.collapsedGroups[state.activeProfile] = Array.from(s);
-        state.store.set(Hub.STORAGE_COLLAPSED_KEY, state.collapsedGroups);
-      };
-
-      try {
-        plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
-      } catch (err) {
-        renderWidgetError(el, w, "Failed to render widget.", err);
-      }
+      renderSingleWidget(w, el);
     });
   }
 
@@ -442,6 +569,7 @@
     state.links = [];
     state.feedEntries = [];
     state.markets = [];
+    state.refreshingWidgets = {};
 
     var widgets = resolvedWidgets();
     var gridEl = document.getElementById("dashboard-grid");
@@ -451,10 +579,19 @@
     var layoutItems = [];
 
     widgets.forEach(function (w) {
-      var el = buildWidgetEl(w);
+      var sizedWidget = applyWidgetMinSize(w);
+      var el = buildWidgetEl(sizedWidget);
       if (!el) return;
-      widgetElements[w.id] = el;
-      layoutItems.push({ widget: w.id, col: w.col || 1, row: w.row || 1, width: w.width || 4, height: w.height || 1 });
+      widgetElements[sizedWidget.id] = el;
+      layoutItems.push({
+        widget: sizedWidget.id,
+        col: sizedWidget.col || 1,
+        row: sizedWidget.row || 1,
+        width: sizedWidget.width,
+        height: sizedWidget.height,
+        minWidth: sizedWidget.minWidth,
+        minHeight: sizedWidget.minHeight
+      });
     });
 
     /* Apply grid layout */
@@ -521,14 +658,7 @@
       widgets.forEach(function (w) {
         var el = widgetElements[w.id];
         var plugin = Hub.registry.get(w.type);
-        if (el && plugin && plugin.load) {
-          loadPromises.push(
-            plugin.load(el, Object.assign({}, w.config || {}, { _id: w.id }), state, token).catch(function (err) {
-              if (token !== state.renderToken) return;
-              renderWidgetError(el, w, "Failed to load widget data.", err);
-            })
-          );
-        }
+        if (el && plugin && plugin.load) loadPromises.push(loadSingleWidget(w, el, token));
       });
       loadPromises.push(runHealthChecks(widgets, token));
       await Promise.allSettled(loadPromises);
@@ -558,6 +688,35 @@
     if (document.activeElement === input) return;
     input.focus();
     if (!input.value) input.select();
+  };
+
+  Hub.refreshWidget = async function (widgetId) {
+    if (!widgetId || state.refreshingWidgets[widgetId]) return false;
+
+    var widget = getWidgetById(widgetId);
+    var el = widgetElements[widgetId];
+    if (!isWidgetManualRefreshable(widget) || !el) return false;
+
+    state.refreshingWidgets[widgetId] = true;
+    state.renderToken++;
+    var token = state.renderToken;
+
+    if (Hub.cache && Hub.cache.clearScope) Hub.cache.clearScope(widgetId, state.store);
+    renderSingleWidget(widget, el);
+    Hub.keyboard.assignWidgetKeys();
+
+    try {
+      await loadSingleWidget(widget, el, token);
+    } finally {
+      if (token === state.renderToken) {
+        delete state.refreshingWidgets[widgetId];
+        setWidgetRefreshState(el, widgetId, false);
+        Hub.keyboard.assignWidgetKeys();
+        Hub.cacheFavicons(state.store);
+      }
+    }
+
+    return token === state.renderToken;
   };
 
   /* ── Topbar clock ── */
@@ -612,6 +771,16 @@
           resultsEl.classList.add("hidden");
         }
       });
+    });
+  }
+
+  function bindWidgetRefresh() {
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest(".widget-refresh-btn[data-widget-id]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      Hub.refreshWidget(btn.dataset.widgetId);
     });
   }
 
@@ -903,7 +1072,14 @@
       if (clone) {
         newLayout.forEach(function (l) {
           var w = clone.find(function (ww) { return ww.id === l.widget; });
-          if (w) { w.col = l.col; w.row = l.row; w.width = l.width; w.height = l.height; }
+          if (w) {
+            w.col = l.col;
+            w.row = l.row;
+            w.width = l.width;
+            w.height = l.height;
+            w.minWidth = l.minWidth;
+            w.minHeight = l.minHeight;
+          }
         });
         state.profileOverrides[state.activeProfile] = { widgets: clone, _savedAt: Date.now() };
         await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
@@ -955,6 +1131,7 @@
             var editControls = el.querySelector(".widget-edit-controls");
             var resizeHandle = el.querySelector(".widget-resize-handle");
             plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
+            ensureScrollableWidgetBody(el);
             /* Restore edit controls so drag/gear/trash still work */
             if (editControls) el.prepend(editControls);
             if (resizeHandle) el.appendChild(resizeHandle);
@@ -964,7 +1141,7 @@
       }
     }
 
-    function onWidgetAdded(newWidget) {
+    async function onWidgetAdded(newWidget, options) {
       /* Re-enter edit mode with updated clone to show new widget.
          We temporarily write the clone to overrides so renderDashboard picks it up,
          but savedOverrides preserves the original state for cancel.
@@ -972,12 +1149,15 @@
       var clone = Hub.grid.getEditClone();
       if (editExitFn) editExitFn();
       editExitFn = null;
-      state.profileOverrides[state.activeProfile] = { widgets: clone };
-      renderDashboard(state.activeProfile, { suppressSearchAutoFocus: true }).then(function () {
-        var gridEl = document.getElementById("dashboard-grid");
-        Hub.grid.setEditClone(clone);
-        editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave);
-      });
+      state.profileOverrides[state.activeProfile] = { widgets: clone, _savedAt: Date.now() };
+      await state.store.set(Hub.STORAGE_OVERRIDES_KEY, state.profileOverrides);
+      await renderDashboard(state.activeProfile, { suppressSearchAutoFocus: true });
+      var gridEl = document.getElementById("dashboard-grid");
+      Hub.grid.setEditClone(clone);
+      editExitFn = Hub.grid.enterEditMode(gridEl, [], saveLayout, cancelLayout, onWidgetAdded, onConfigSave, newWidget.id);
+      if (options && options.openConfig) {
+        Hub.grid.openConfigModal(newWidget.id, onConfigSave);
+      }
     }
 
     function enterEdit() {
@@ -1063,6 +1243,7 @@
     }
 
     bindSearch();
+    bindWidgetRefresh();
     Hub.keyboard.bind(function () { return state; });
     Hub.syncStatus.init();
     bindProfileSwitcher();

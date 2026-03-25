@@ -1,50 +1,114 @@
 /* ── Weather widget plugin ── */
 
 Hub.injectStyles("widget-weather", `
-  .weather-current {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 4px 0 8px;
+  .weather-condition {
+    text-align: center;
+    padding: 12px 0 0;
   }
-  .weather-icon { font-size: 2.4rem; line-height: 1; }
-  .weather-info { display: flex; flex-direction: column; gap: 2px; }
-  .weather-temp {
+  .weather-cond-name {
     font-family: var(--font-display);
-    font-size: 2rem;
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 1;
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
   }
-  .weather-desc { font-size: 0.82rem; color: var(--muted-strong); }
-  .weather-wind { font-size: 0.72rem; color: var(--muted); }
-  .weather-forecast {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
+  .weather-feels {
+    font-size: 0.82rem;
+    color: var(--muted-strong);
+    margin-top: 5px;
   }
-  .weather-day {
+  .weather-chart-outer {
+    position: relative;
+    margin: 16px 0 0;
+  }
+  .weather-chart {
+    position: relative;
+    height: 90px;
+    padding-top: 22px;
+    box-sizing: border-box;
+  }
+  .weather-bars {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+    gap: 2px;
+    padding: 0 8px;
+    box-sizing: border-box;
+  }
+  .weather-daylight {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: rgba(200, 140, 50, 0.13);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .weather-bar-col {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    justify-content: flex-end;
+    height: 100%;
+    position: relative;
   }
-  .weather-day-label {
-    font-size: 0.64rem;
+  .weather-precip-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #5b9cf6;
+    margin-bottom: 3px;
+    visibility: hidden;
+    flex-shrink: 0;
+  }
+  .weather-precip-dot.on { visibility: visible; }
+  .weather-bar {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    background: rgba(255, 255, 255, 0.18);
+    min-height: 4px;
+  }
+  .weather-bar.day {
+    background: rgba(255, 255, 255, 0.26);
+  }
+  .weather-bar.now {
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .weather-now-val {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.68rem;
     font-weight: 700;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--text);
+    white-space: nowrap;
   }
-  .weather-day-icon { font-size: 1.1rem; }
-  .weather-day-range { font-size: 0.68rem; color: var(--muted); }
+  .weather-time-row {
+    position: relative;
+    height: 18px;
+    margin: 4px 8px 0;
+  }
+  .weather-time-lbl {
+    position: absolute;
+    font-size: 0.65rem;
+    color: var(--muted);
+    transform: translateX(-50%);
+    top: 0;
+    white-space: nowrap;
+  }
+  .weather-loc {
+    text-align: center;
+    padding: 8px 0 12px;
+    font-size: 0.73rem;
+    color: var(--muted);
+  }
 `);
 
 Hub.registry.register("weather", {
   label: "Weather",
-  icon: "\u2600",
+  icon: "cloud",
 
   render: function (container, config) {
     container.innerHTML =
@@ -62,15 +126,15 @@ Hub.registry.register("weather", {
 
     var units = config.units === "fahrenheit" ? "fahrenheit" : "celsius";
     var unitSym = units === "fahrenheit" ? "\u00B0F" : "\u00B0C";
-    var windUnit = units === "fahrenheit" ? "mph" : "km/h";
     var store = state.store;
 
     try {
       var geo = await Hub.cachedFetchJSON(
         "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(location) + "&count=1&language=en&format=json",
-        "default",
+        "weather",
         store
       );
+      if (token !== state.renderToken) return;
 
       if (!geo.results || !geo.results.length) {
         bodyEl.innerHTML = '<div class="empty-state">Location not found.</div>';
@@ -78,49 +142,80 @@ Hub.registry.register("weather", {
       }
 
       var place = geo.results[0];
+      var locationName = place.name + (place.country ? ", " + place.country : "");
+
       var weatherUrl =
         "https://api.open-meteo.com/v1/forecast" +
         "?latitude=" + place.latitude +
         "&longitude=" + place.longitude +
-        "&current=temperature_2m,weathercode,windspeed_10m" +
-        "&daily=temperature_2m_max,temperature_2m_min,weathercode" +
+        "&current=temperature_2m,apparent_temperature,weathercode" +
+        "&hourly=temperature_2m,precipitation_probability" +
+        "&daily=sunrise,sunset" +
         "&temperature_unit=" + units +
-        "&windspeed_unit=" + (units === "fahrenheit" ? "mph" : "kmh") +
-        "&timezone=auto&forecast_days=5";
+        "&timezone=auto&forecast_days=1";
 
-      var w = await Hub.cachedFetchJSON(weatherUrl, "default", store);
+      var w = await Hub.cachedFetchJSON(weatherUrl, "weather", store);
       if (token !== state.renderToken) return;
 
       var cur = w.current;
+      var hourly = w.hourly;
       var daily = w.daily;
-      var today = new Date();
 
-      var forecastHtml = "";
-      for (var i = 0; i < 5; i++) {
-        var dayLabel = i === 0
-          ? "Today"
-          : new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(daily.time[i] + "T12:00:00"));
-        forecastHtml +=
-          '<div class="weather-day">' +
-            '<span class="weather-day-label">' + Hub.escapeHtml(dayLabel) + '</span>' +
-            '<span class="weather-day-icon">' + weatherWmoIcon(daily.weathercode[i]) + '</span>' +
-            '<span class="weather-day-range">' +
-              Math.round(daily.temperature_2m_max[i]) + '/' +
-              Math.round(daily.temperature_2m_min[i]) +
-            '</span>' +
+      var nowHour = parseInt(cur.time.slice(11, 13), 10);
+
+      var sunriseHour = daily.sunrise[0] ? parseInt(daily.sunrise[0].slice(11, 13), 10) : 6;
+      var sunriseMin  = daily.sunrise[0] ? parseInt(daily.sunrise[0].slice(14, 16), 10) : 0;
+      var sunsetHour  = daily.sunset[0]  ? parseInt(daily.sunset[0].slice(11, 13), 10) : 20;
+      var sunsetMin   = daily.sunset[0]  ? parseInt(daily.sunset[0].slice(14, 16), 10) : 0;
+
+      var temps   = hourly.temperature_2m.slice(0, 24);
+      var precips = hourly.precipitation_probability.slice(0, 24);
+
+      var minT  = Math.min.apply(null, temps);
+      var maxT  = Math.max.apply(null, temps);
+      var range = (maxT - minT) || 1;
+
+      var riseLeft  = ((sunriseHour + sunriseMin / 60) / 24 * 100).toFixed(1);
+      var setRight  = (100 - (sunsetHour + sunsetMin / 60) / 24 * 100).toFixed(1);
+
+      var barsHtml = "";
+      for (var i = 0; i < 24; i++) {
+        var heightPct = Math.max(5, ((temps[i] - minT) / range) * 76 + 8);
+        var isNow   = (i === nowHour);
+        var isDay   = (i >= sunriseHour && i <= sunsetHour);
+        var showDot = (precips[i] >= 40);
+        var barClass = "weather-bar" + (isNow ? " now" : (isDay ? " day" : ""));
+        barsHtml +=
+          '<div class="weather-bar-col">' +
+            '<div class="weather-precip-dot' + (showDot ? ' on' : '') + '"></div>' +
+            '<div class="' + barClass + '" style="height:' + heightPct.toFixed(0) + '%"></div>' +
+            (isNow ? '<span class="weather-now-val">' + Math.round(cur.temperature_2m) + unitSym + '</span>' : '') +
           '</div>';
       }
 
+      var timePoints = [{ h: 6, label: "6am" }, { h: 14, label: "2pm" }, { h: 22, label: "10pm" }];
+      var timeLabelsHtml = "";
+      for (var j = 0; j < timePoints.length; j++) {
+        var leftPct = ((timePoints[j].h + 0.5) / 24 * 100).toFixed(1);
+        timeLabelsHtml += '<span class="weather-time-lbl" style="left:' + leftPct + '%">' + timePoints[j].label + '</span>';
+      }
+
       bodyEl.innerHTML =
-        '<div class="weather-current">' +
-          '<span class="weather-icon">' + weatherWmoIcon(cur.weathercode) + '</span>' +
-          '<div class="weather-info">' +
-            '<span class="weather-temp">' + Math.round(cur.temperature_2m) + unitSym + '</span>' +
-            '<span class="weather-desc">' + Hub.escapeHtml(weatherWmoDesc(cur.weathercode)) + '</span>' +
-            '<span class="weather-wind">\uD83D\uDCA8 ' + Math.round(cur.windspeed_10m) + ' ' + windUnit + '</span>' +
-          '</div>' +
+        '<div class="weather-condition">' +
+          '<div class="weather-cond-name">' + Hub.escapeHtml(weatherWmoDesc(cur.weathercode)) + '</div>' +
+          '<div class="weather-feels">Feels like ' + Math.round(cur.apparent_temperature) + unitSym + '</div>' +
         '</div>' +
-        '<div class="weather-forecast">' + forecastHtml + '</div>';
+        '<div class="weather-chart-outer">' +
+          '<div class="weather-chart">' +
+            '<div class="weather-bars">' +
+              '<div class="weather-daylight" style="left:' + riseLeft + '%;right:' + setRight + '%"></div>' +
+              barsHtml +
+            '</div>' +
+          '</div>' +
+          '<div class="weather-time-row">' + timeLabelsHtml + '</div>' +
+        '</div>' +
+        '<div class="weather-loc">\uD83D\uDCCD ' + Hub.escapeHtml(locationName) + '</div>';
+
     } catch (_) {
       if (token !== state.renderToken) return;
       bodyEl.innerHTML = '<div class="empty-state">Failed to load weather.</div>';
@@ -133,7 +228,9 @@ Hub.registry.register("weather", {
     var titleLabel = document.createElement("label");
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Weather") + '" />';
-    titleLabel.querySelector("input").addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
+    var titleInput = titleLabel.querySelector("input");
+    titleInput.dataset.navHeaderField = "";
+    titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
     var locLabel = document.createElement("label");

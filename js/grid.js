@@ -4,6 +4,7 @@ window.Hub = window.Hub || {};
 
 Hub.grid = (function () {
   var COLS = 12;
+  var ROW_HEIGHT = 88;
   var editing = false;
   var dragWidget = null;
   var resizeWidget = null;
@@ -76,16 +77,79 @@ Hub.grid = (function () {
     return layout.filter(function (other) { return collides(item, other); });
   }
 
-  /* Push colliding items downward to make room for movedItem.
-     Recursively handles cascading collisions. */
+  function fitsWithinGrid(item) {
+    return item.col >= 1 &&
+      item.row >= 1 &&
+      item.width >= 1 &&
+      item.height >= 1 &&
+      item.col + item.width - 1 <= COLS;
+  }
+
+  function itemMinWidth(item) {
+    return Math.max(1, parseInt(item && item.minWidth, 10) || 1);
+  }
+
+  function itemMinHeight(item) {
+    return Math.max(1, parseInt(item && item.minHeight, 10) || 1);
+  }
+
+  function canPlace(layout, candidate) {
+    if (!fitsWithinGrid(candidate)) return false;
+    return !layout.some(function (item) {
+      return collides(candidate, item);
+    });
+  }
+
+  function buildColumnOrder(startCol, maxCol) {
+    var cols = [];
+    var seen = {};
+    var preferred = Math.max(1, Math.min(maxCol, startCol || 1));
+
+    function add(col) {
+      if (col < 1 || col > maxCol || seen[col]) return;
+      seen[col] = true;
+      cols.push(col);
+    }
+
+    add(preferred);
+    for (var step = 1; cols.length < maxCol; step++) {
+      add(preferred + step);
+      add(preferred - step);
+    }
+
+    return cols;
+  }
+
+  function findClosestAvailableSlot(layout, item) {
+    var maxCol = Math.max(1, COLS - item.width + 1);
+    var preferredCol = Math.max(1, Math.min(maxCol, item.col || 1));
+    var preferredRow = Math.max(1, item.row || 1);
+    var maxRow = layout.reduce(function (m, other) {
+      return Math.max(m, (other.row || 1) + (other.height || 1));
+    }, preferredRow) + 1;
+    var cols = buildColumnOrder(preferredCol, maxCol);
+
+    for (var row = preferredRow; row <= maxRow; row++) {
+      for (var i = 0; i < cols.length; i++) {
+        var candidate = Object.assign({}, item, {
+          col: cols[i],
+          row: row
+        });
+        if (canPlace(layout, candidate)) return { col: candidate.col, row: candidate.row };
+      }
+    }
+
+    return findFirstAvailableSlot(layout, item.width, item.height, item.widget);
+  }
+
+  /* Re-home colliding items to the nearest open slot before pushing them farther down. */
   function resolveCollisions(layout, movedItem) {
     var collisions = getCollisions(layout, movedItem);
     for (var i = 0; i < collisions.length; i++) {
       var other = collisions[i];
-      /* Push the colliding item below the moved item */
-      other.row = movedItem.row + movedItem.height;
-      /* Recursively resolve any new collisions caused by this push */
-      resolveCollisions(layout, other);
+      var slot = findClosestAvailableSlot(layout, other);
+      other.col = slot.col;
+      other.row = slot.row;
     }
   }
 
@@ -116,7 +180,7 @@ Hub.grid = (function () {
     }
   }
 
-  function findFirstAvailableSlot(layout, width, height) {
+  function findFirstAvailableSlot(layout, width, height, widgetId) {
     var maxRow = layout.reduce(function (m, item) {
       return Math.max(m, (item.row || 1) + (item.height || 1));
     }, 1);
@@ -124,20 +188,60 @@ Hub.grid = (function () {
     for (var row = 1; row <= maxRow + 1; row++) {
       for (var col = 1; col <= COLS - width + 1; col++) {
         var candidate = {
-          widget: "__candidate__",
+          widget: widgetId || "__candidate__",
           col: col,
           row: row,
           width: width,
           height: height
         };
-        var blocked = layout.some(function (item) {
-          return collides(candidate, item);
-        });
-        if (!blocked) return { col: col, row: row };
+        if (canPlace(layout, candidate)) return { col: col, row: row };
       }
     }
 
     return { col: 1, row: maxRow + 1 };
+  }
+
+  function normalizeItemBounds(item) {
+    var minWidth = itemMinWidth(item);
+    var minHeight = itemMinHeight(item);
+    var width = Math.max(minWidth, Math.min(COLS, item.width || minWidth));
+    var col = Math.max(1, Math.min(COLS - width + 1, item.col || 1));
+    return {
+      widget: item.widget,
+      col: col,
+      row: Math.max(1, item.row || 1),
+      width: width,
+      height: Math.max(minHeight, item.height || minHeight),
+      minWidth: minWidth,
+      minHeight: minHeight
+    };
+  }
+
+  function resolveLayoutChange(layout, changedItem) {
+    var nextLayout = layout.map(function (item) {
+      return Object.assign({}, item);
+    });
+    var target = nextLayout.find(function (item) {
+      return item.widget === changedItem.widget;
+    });
+    var normalized = normalizeItemBounds(Object.assign({}, target || {}, changedItem));
+
+    if (target) {
+      target.col = normalized.col;
+      target.row = normalized.row;
+      target.width = normalized.width;
+      target.height = normalized.height;
+      target.minWidth = normalized.minWidth;
+      target.minHeight = normalized.minHeight;
+    } else {
+      target = normalized;
+      nextLayout.push(target);
+    }
+
+    resolveCollisions(nextLayout, target);
+    compact(nextLayout, target.widget);
+
+    return nextLayout;
   }
 
   /* Build a layout array from current DOM state */
@@ -150,6 +254,8 @@ Hub.grid = (function () {
         row: parseInt(el.dataset.gridRow) || 1,
         width: parseInt(el.dataset.gridWidth) || 4,
         height: parseInt(el.dataset.gridHeight) || 1,
+        minWidth: parseInt(el.dataset.gridMinWidth) || 1,
+        minHeight: parseInt(el.dataset.gridMinHeight) || 1,
         el: el
       });
     });
@@ -166,6 +272,8 @@ Hub.grid = (function () {
       item.el.dataset.gridRow = item.row;
       item.el.dataset.gridWidth = item.width;
       item.el.dataset.gridHeight = item.height;
+      item.el.dataset.gridMinWidth = itemMinWidth(item);
+      item.el.dataset.gridMinHeight = itemMinHeight(item);
     });
   }
 
@@ -178,7 +286,7 @@ Hub.grid = (function () {
     gridEl.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
     gridEl.style.gap = "10px";
     gridEl.style.gridAutoFlow = "dense";
-    gridEl.style.gridAutoRows = "minmax(60px, auto)";
+    gridEl.style.gridAutoRows = ROW_HEIGHT + "px";
 
     var frag = document.createDocumentFragment();
     sorted.forEach(function (item) {
@@ -192,6 +300,8 @@ Hub.grid = (function () {
       el.dataset.gridRow = item.row;
       el.dataset.gridWidth = item.width;
       el.dataset.gridHeight = item.height;
+      el.dataset.gridMinWidth = itemMinWidth(item);
+      el.dataset.gridMinHeight = itemMinHeight(item);
 
       frag.appendChild(el);
     });
@@ -474,7 +584,7 @@ Hub.grid = (function () {
     overlay.className = "modal-overlay";
 
     var panel = document.createElement("div");
-    panel.className = "modal-panel";
+    panel.className = "modal-panel add-widget-modal-panel";
 
     var header = document.createElement("div");
     header.className = "modal-header";
@@ -522,11 +632,19 @@ Hub.grid = (function () {
         card.className = "add-widget-card";
         card.type = "button";
         card.tabIndex = 0;
-        var iconKey = Hub.iconForType[p.type] || "plus";
-        card.innerHTML = (Hub.icons[iconKey] || "") + "<span>" + Hub.escapeHtml(p.label) + "</span>";
+        var icon = p.icon || "plus";
+        var iconHtml;
+        if (/^https?:\/\//.test(icon)) {
+          iconHtml = '<img src="' + Hub.escapeHtml(icon) + '" class="add-widget-icon-img" width="14" height="14" alt="">';
+        } else {
+          iconHtml = Hub.icons[icon] || Hub.icons.plus;
+        }
+        card.innerHTML = iconHtml + "<span>" + Hub.escapeHtml(p.label) + "</span>";
         card.addEventListener("click", function () {
-          var width = 4;
-          var height = 1;
+          var config = p.defaultConfig();
+          var minSize = Hub.registry.getMinSize ? Hub.registry.getMinSize(p.type, config) : null;
+          var width = Math.max(4, minSize ? minSize.cols : 1);
+          var height = Math.max(1, minSize ? minSize.rows : 1);
           var slot = findFirstAvailableSlot(editClone, width, height);
           var newWidget = {
             id: Hub.uid(),
@@ -535,11 +653,13 @@ Hub.grid = (function () {
             row: slot.row,
             width: width,
             height: height,
-            config: p.defaultConfig()
+            minWidth: minSize ? minSize.cols : 1,
+            minHeight: minSize ? minSize.rows : 1,
+            config: config
           };
           editClone.push(newWidget);
           close();
-          if (onAdded) onAdded(newWidget);
+          if (onAdded) onAdded(newWidget, { openConfig: !!p.renderEditor });
         });
         cardGrid.appendChild(card);
       });
@@ -672,6 +792,18 @@ Hub.grid = (function () {
     }
   }
 
+  function pulseAddedWidget(el) {
+    if (!el) return;
+    el.classList.remove("widget-added-highlight");
+    if (el._addedHighlightTimer) clearTimeout(el._addedHighlightTimer);
+    void el.offsetWidth;
+    el.classList.add("widget-added-highlight");
+    el._addedHighlightTimer = setTimeout(function () {
+      el.classList.remove("widget-added-highlight");
+      el._addedHighlightTimer = null;
+    }, 1800);
+  }
+
   function handleEditKey(e) {
     var gridEl = document.getElementById("dashboard-grid");
     if (!gridEl || !editing) return false;
@@ -760,6 +892,8 @@ Hub.grid = (function () {
     var row = parseInt(w.dataset.gridRow);
     var width = parseInt(w.dataset.gridWidth);
     var height = parseInt(w.dataset.gridHeight);
+    var minWidth = parseInt(w.dataset.gridMinWidth) || 1;
+    var minHeight = parseInt(w.dataset.gridMinHeight) || 1;
 
     /* Arrow keys: move widget (or resize with Shift) */
     if (key === "ArrowRight" || key === "ArrowLeft" || key === "ArrowDown" || key === "ArrowUp") {
@@ -768,9 +902,9 @@ Hub.grid = (function () {
       if (shiftKey) {
         /* Resize */
         if (key === "ArrowRight") width = Math.min(COLS - col + 1, width + 1);
-        else if (key === "ArrowLeft") width = Math.max(1, width - 1);
+        else if (key === "ArrowLeft") width = Math.max(minWidth, width - 1);
         else if (key === "ArrowDown") height = height + 1;
-        else if (key === "ArrowUp") height = Math.max(1, height - 1);
+        else if (key === "ArrowUp") height = Math.max(minHeight, height - 1);
 
         w.dataset.gridWidth = width;
         w.dataset.gridHeight = height;
@@ -786,20 +920,21 @@ Hub.grid = (function () {
       }
 
       /* Resolve collisions and compact (pin the moved widget so downward placement is preserved) */
-      var layout = buildLayoutFromGrid(gridEl);
-      var movedItem = layout.find(function (it) { return it.widget === w.dataset.gridWidget; });
-      if (movedItem) {
-        movedItem.col = col;
-        movedItem.row = row;
-        movedItem.width = width;
-        movedItem.height = height;
-        resolveCollisions(layout, movedItem);
-        compact(layout, movedItem.widget);
-        syncLayoutToDOM(layout);
-      } else {
-        w.style.gridColumn = col + " / span " + width;
-        w.style.gridRow = row + " / span " + height;
-      }
+        var layout = buildLayoutFromGrid(gridEl);
+        if (layout.some(function (it) { return it.widget === w.dataset.gridWidget; })) {
+          syncLayoutToDOM(resolveLayoutChange(layout, {
+            widget: w.dataset.gridWidget,
+            col: col,
+            row: row,
+            width: width,
+            height: height,
+            minWidth: minWidth,
+            minHeight: minHeight
+          }));
+        } else {
+          w.style.gridColumn = col + " / span " + width;
+          w.style.gridRow = row + " / span " + height;
+        }
       return true;
     }
 
@@ -831,7 +966,7 @@ Hub.grid = (function () {
     return false;
   }
 
-  function enterEditMode(gridEl, layout, onSave, onCancel, onAdded, onConfigSave) {
+  function enterEditMode(gridEl, layout, onSave, onCancel, onAdded, onConfigSave, focusWidgetId) {
     editing = true;
     editFocusedWidget = null;
     gridEl.classList.add("grid-editing");
@@ -903,7 +1038,9 @@ Hub.grid = (function () {
           startX: e.clientX,
           startY: e.clientY,
           origWidth: parseInt(w.dataset.gridWidth),
-          origHeight: parseInt(w.dataset.gridHeight)
+          origHeight: parseInt(w.dataset.gridHeight),
+          minWidth: parseInt(w.dataset.gridMinWidth) || 1,
+          minHeight: parseInt(w.dataset.gridMinHeight) || 1
         };
       });
 
@@ -925,10 +1062,18 @@ Hub.grid = (function () {
       controls.appendChild(badge);
     });
 
+    if (focusWidgetId) {
+      var focused = gridEl.querySelector('[data-widget-id="' + focusWidgetId + '"]');
+      if (focused) {
+        setEditFocus(focused);
+        pulseAddedWidget(focused);
+      }
+    }
+
     function onMouseMove(e) {
       var gridRect = gridEl.getBoundingClientRect();
       var cellW = gridRect.width / COLS;
-      var rowH = 100;
+      var rowH = ROW_HEIGHT;
 
       if (dragWidget) {
         var dx = e.clientX - dragWidget.startX;
@@ -946,13 +1091,14 @@ Hub.grid = (function () {
 
         /* Build layout, resolve collisions, compact (pin dragged widget so downward drag sticks) */
         var layout = buildLayoutFromGrid(gridEl);
-        var movedItem = layout.find(function (it) { return it.widget === dragWidget.el.dataset.gridWidget; });
-        if (movedItem) {
-          movedItem.col = newCol;
-          movedItem.row = newRow;
-          resolveCollisions(layout, movedItem);
-          compact(layout, movedItem.widget);
-          syncLayoutToDOM(layout);
+        if (layout.some(function (it) { return it.widget === dragWidget.el.dataset.gridWidget; })) {
+          syncLayoutToDOM(resolveLayoutChange(layout, {
+            widget: dragWidget.el.dataset.gridWidget,
+            col: newCol,
+            row: newRow,
+            width: w,
+            height: h
+          }));
         }
       }
 
@@ -961,8 +1107,8 @@ Hub.grid = (function () {
         var rdy = e.clientY - resizeWidget.startY;
         var col = parseInt(resizeWidget.el.dataset.gridCol);
         var row = parseInt(resizeWidget.el.dataset.gridRow);
-        var newW = Math.max(1, Math.min(COLS - col + 1, resizeWidget.origWidth + Math.round(rdx / cellW)));
-        var newH = Math.max(1, resizeWidget.origHeight + Math.round(rdy / rowH));
+        var newW = Math.max(resizeWidget.minWidth, Math.min(COLS - col + 1, resizeWidget.origWidth + Math.round(rdx / cellW)));
+        var newH = Math.max(resizeWidget.minHeight, resizeWidget.origHeight + Math.round(rdy / rowH));
 
         /* Update the resized widget */
         resizeWidget.el.dataset.gridWidth = newW;
@@ -970,13 +1116,16 @@ Hub.grid = (function () {
 
         /* Build layout, resolve collisions, compact (pin resized widget) */
         var layout = buildLayoutFromGrid(gridEl);
-        var resizedItem = layout.find(function (it) { return it.widget === resizeWidget.el.dataset.gridWidget; });
-        if (resizedItem) {
-          resizedItem.width = newW;
-          resizedItem.height = newH;
-          resolveCollisions(layout, resizedItem);
-          compact(layout, resizedItem.widget);
-          syncLayoutToDOM(layout);
+        if (layout.some(function (it) { return it.widget === resizeWidget.el.dataset.gridWidget; })) {
+          syncLayoutToDOM(resolveLayoutChange(layout, {
+            widget: resizeWidget.el.dataset.gridWidget,
+            col: col,
+            row: row,
+            width: newW,
+            height: newH,
+            minWidth: resizeWidget.minWidth,
+            minHeight: resizeWidget.minHeight
+          }));
         }
       }
     }
@@ -1030,7 +1179,9 @@ Hub.grid = (function () {
         col: parseInt(w.dataset.gridCol) || 1,
         row: parseInt(w.dataset.gridRow) || 1,
         width: parseInt(w.dataset.gridWidth) || 4,
-        height: parseInt(w.dataset.gridHeight) || 1
+        height: parseInt(w.dataset.gridHeight) || 1,
+        minWidth: parseInt(w.dataset.gridMinWidth) || 1,
+        minHeight: parseInt(w.dataset.gridMinHeight) || 1
       });
     });
     return layout;
@@ -1047,6 +1198,7 @@ Hub.grid = (function () {
     getEditClone: getEditClone,
     openConfigModal: openConfigModal,
     openAddWidgetModal: openAddWidgetModal,
-    handleEditKey: handleEditKey
+    handleEditKey: handleEditKey,
+    resolveLayoutChange: resolveLayoutChange
   };
 })();

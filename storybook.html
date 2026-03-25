@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Widget Playground — newtab-hub</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body { display: flex; }
+
+    /* ── Sidebar ── */
+    .sb-sidebar {
+      width: 196px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border-strong);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sb-sidebar-head {
+      padding: 14px 14px 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sb-search-wrap {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sb-search-wrap input {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm, 4px);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.8rem;
+      padding: 5px 8px;
+      outline: none;
+    }
+    .sb-search-wrap input:focus { border-color: var(--border-strong); }
+    .sb-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+    .sb-item {
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      color: var(--muted-strong);
+      user-select: none;
+    }
+    .sb-item:hover { background: var(--surface-hover); color: var(--text); }
+    .sb-item.active { background: var(--surface-hover); color: var(--text); font-weight: 600; }
+    .sb-empty-list { padding: 16px 14px; font-size: 0.78rem; color: var(--muted); }
+
+    /* ── Main ── */
+    .sb-main { flex: 1; display: flex; overflow: hidden; }
+
+    /* ── Preview pane ── */
+    .sb-preview {
+      flex: 1;
+      overflow: auto;
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .sb-preview-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .sb-preview-subtitle { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .sb-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .sb-controls-label { font-size: 0.7rem; color: var(--muted); margin-right: 2px; }
+    .sb-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm, 4px);
+      color: var(--muted-strong);
+      font: inherit;
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    .sb-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+    .sb-btn.active { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); font-weight: 600; }
+    .sb-divider { color: var(--border-strong); margin: 0 2px; }
+
+    /* ── Editor pane ── */
+    .sb-editor {
+      width: 272px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border-strong);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sb-editor-head {
+      padding: 14px 16px 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sb-editor-body { overflow-y: auto; flex: 1; padding: 12px 14px; }
+    .sb-editor-empty { padding: 24px 0; font-size: 0.8rem; color: var(--muted); text-align: center; }
+
+    /* ── Splash ── */
+    .sb-splash {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .sb-splash-icon { font-size: 2.4rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Must run before storage.js / credentials.js -->
+  <script src="js/storybook-init.js"></script>
+
+  <!-- Hub core (same load order as index.html) -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/cache.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/credentials.js"></script>
+  <script src="js/registry.js"></script>
+
+  <!-- Loads every widget via synchronous document.write (all registered before next script) -->
+  <script src="js/widgets/loader.js"></script>
+
+  <!-- Shell -->
+  <nav class="sb-sidebar">
+    <div class="sb-sidebar-head">Widgets</div>
+    <div class="sb-search-wrap">
+      <input id="sb-search" type="search" placeholder="Search widgets…" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="sb-list" id="sb-list"></div>
+  </nav>
+
+  <div class="sb-main">
+    <div class="sb-preview" id="sb-preview">
+      <div class="sb-splash" id="sb-splash">
+        <span class="sb-splash-icon">&#129513;</span>
+        <span>Select a widget from the sidebar</span>
+      </div>
+    </div>
+
+    <aside class="sb-editor">
+      <div class="sb-editor-head">Editor</div>
+      <div class="sb-editor-body" id="sb-editor-body">
+        <div class="sb-editor-empty">No widget selected</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Mock data (must come before storybook.js) -->
+  <script src="js/storybook-mocks.js"></script>
+  <!-- Storybook logic (external, CSP-safe) -->
+  <script src="js/storybook.js"></script>
+
+</body>
+</html>
