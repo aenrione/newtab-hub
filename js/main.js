@@ -83,7 +83,7 @@
         var el = widgetElements[w.id];
         if (!el) return;
         state._collapsedGroups = new Set(state.collapsedGroups[state.activeProfile] || []);
-        plugin.render(el, w.config || {}, state);
+        plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
       });
     }
   }
@@ -715,11 +715,11 @@
             /* Save edit controls before render wipes innerHTML */
             var editControls = el.querySelector(".widget-edit-controls");
             var resizeHandle = el.querySelector(".widget-resize-handle");
-            plugin.render(el, w.config || {}, state);
+            plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
             /* Restore edit controls so drag/gear/trash still work */
             if (editControls) el.prepend(editControls);
             if (resizeHandle) el.appendChild(resizeHandle);
-            if (plugin.load) plugin.load(el, w.config || {}, state, state.renderToken);
+            if (plugin.load) plugin.load(el, Object.assign({}, w.config || {}, { _id: w.id }), state, state.renderToken);
           }
         }
       }
