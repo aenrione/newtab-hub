@@ -1,5 +1,43 @@
 /* ── Markets widget plugin ── */
 
+Hub.injectStyles("widget-markets", `
+  .market-list { display: grid; gap: 1px; }
+  .market-row {
+    display: grid;
+    grid-template-columns: 60px 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.88rem;
+    transition: background 80ms;
+  }
+  .market-row:hover { background: var(--surface-hover); }
+  .market-symbol {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .market-label { font-weight: 500; }
+  .market-price {
+    font-family: var(--font-display);
+    font-size: 0.82rem;
+    text-align: right;
+  }
+  .market-change {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: right;
+    min-width: 52px;
+  }
+  .market-change.is-up { color: var(--ok); }
+  .market-change.is-down { color: var(--down); }
+`);
+
 Hub.registry.register("markets", {
   label: "Markets",
   icon: "\u2197",
@@ -101,7 +139,7 @@ Hub.registry.register("markets", {
   }
 });
 
-/* ── Data fetchers (shared) ── */
+/* ── Data fetchers ── */
 
 function stooqUrl(symbol) { return "https://stooq.com/q/l/?s=" + encodeURIComponent(symbol) + "&i=d"; }
 

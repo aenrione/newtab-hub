@@ -1,5 +1,76 @@
 /* ── Todo widget plugin ── */
 
+Hub.injectStyles("widget-todo", `
+  .todo-input-row { margin-bottom: 6px; position: relative; }
+  .todo-input {
+    width: 100%;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.84rem;
+  }
+  .todo-input::placeholder { color: var(--muted); }
+  .todo-input:focus { outline: none; border-color: var(--accent-2); }
+  .todo-list { display: grid; gap: 1px; }
+  .todo-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 80ms;
+    user-select: none;
+  }
+  .todo-row:hover { background: var(--surface-hover); }
+  .todo-check { flex-shrink: 0; font-size: 0.9rem; line-height: 1; color: var(--muted); }
+  .todo-row.is-done .todo-check { color: var(--ok); }
+  .todo-text {
+    flex: 1;
+    font-size: 0.86rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .todo-row.is-done .todo-text { text-decoration: line-through; color: var(--muted); }
+  .todo-delete {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .todo-row:hover .todo-delete,
+  .todo-row:focus .todo-delete,
+  .todo-row:focus-within .todo-delete { display: inline-flex; }
+  .todo-delete:hover { color: var(--down); }
+  .todo-clear-btn { font-size: 0.68rem; }
+  .todo-title { cursor: default; }
+  .todo-title:hover { text-decoration-style: dotted; text-decoration-line: underline; text-underline-offset: 3px; }
+  .todo-title-edit {
+    font: inherit;
+    font-family: var(--font-display);
+    font-size: inherit;
+    font-weight: inherit;
+    background: var(--bg);
+    border: 1px solid var(--accent-2, #79aee8);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 0 4px;
+    margin: -2px 0;
+    outline: none;
+    width: 100%;
+  }
+`);
+
 Hub.registry.register("todo", {
   label: "Todo",
   icon: "\u2611",
@@ -17,7 +88,6 @@ Hub.registry.register("todo", {
       '</div>' +
       '<div class="todo-list"><div class="empty-state">Loading\u2026</div></div>';
 
-    /* Inline rename on double-click */
     function attachRename(h2El) {
       h2El.addEventListener("dblclick", function startRename() {
         if (Hub.grid.isEditing()) return;
@@ -89,7 +159,6 @@ Hub.registry.register("todo", {
           '<span class="todo-text">' + Hub.escapeHtml(todo.text) + '</span>' +
           '<button class="todo-delete" type="button" tabindex="-1" title="Delete">' + Hub.icons.x + '</button>';
 
-        /* Toggle done on click/Enter */
         row.addEventListener("click", function (e) {
           if (e.target.closest(".todo-delete")) return;
           todo.done = !todo.done;
@@ -104,7 +173,6 @@ Hub.registry.register("todo", {
             todo.done = !todo.done;
             save();
             renderList();
-            /* Re-focus the same index */
             var rows = listEl.querySelectorAll(".todo-row");
             if (rows[i]) rows[i].focus();
           }
@@ -120,7 +188,6 @@ Hub.registry.register("todo", {
           }
         });
 
-        /* Delete button */
         row.querySelector(".todo-delete").addEventListener("click", function (e) {
           e.stopPropagation();
           todos.splice(i, 1);
@@ -139,7 +206,6 @@ Hub.registry.register("todo", {
       clearBtn.style.display = hasDone ? "" : "none";
     }
 
-    /* Add todo on Enter, blur on Escape */
     inputEl.addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -157,7 +223,6 @@ Hub.registry.register("todo", {
       }
     });
 
-    /* Clear completed */
     clearBtn.addEventListener("click", function () {
       todos = todos.filter(function (t) { return !t.done; });
       save();

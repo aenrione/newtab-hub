@@ -99,6 +99,14 @@ Hub.formatDate = function (dateString) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
 };
 
+Hub.injectStyles = function (id, css) {
+  if (document.getElementById(id)) return;
+  var el = document.createElement("style");
+  el.id = id;
+  el.textContent = css;
+  document.head.appendChild(el);
+};
+
 Hub.fetchWithTimeout = async function (url, options, timeoutMs) {
   var controller = new AbortController();
   var timer = setTimeout(function () { controller.abort(); }, timeoutMs);

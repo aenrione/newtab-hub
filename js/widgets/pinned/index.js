@@ -1,5 +1,43 @@
 /* ── Pinned links widget plugin ── */
 
+Hub.injectStyles("widget-pinned", `
+  .widget-pinned { border: none; padding: 4px 0; }
+  .pinned-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pinned-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px 6px 8px;
+    border-radius: var(--radius-md);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background 100ms;
+    white-space: nowrap;
+  }
+  .pinned-item:hover { background: var(--surface-hover); }
+  .pinned-title { font-weight: 500; }
+  .pinned-index {
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    color: var(--muted);
+    opacity: 0.6;
+    margin-left: 2px;
+  }
+  .pinned-badge {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-left: 2px;
+  }
+`);
+
 Hub.registry.register("pinned-links", {
   label: "Pinned Links",
   icon: "\u2606",
@@ -47,7 +85,7 @@ Hub.registry.register("pinned-links", {
   }
 });
 
-/* ── Shared editor helper (used by pinned, links, markets, feeds) ── */
+/* ── Shared editor helpers (used by pinned, links, markets, feeds) ── */
 
 function emptyNode(text) {
   var d = document.createElement("div");
@@ -65,7 +103,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   addBtn.className = "toolbar-button toolbar-button-ghost";
   addBtn.type = "button";
   addBtn.textContent = "+ Add";
-  addBtn.dataset.navAdd = "";                              // ← NEW
+  addBtn.dataset.navAdd = "";
   addBtn.addEventListener("click", function () {
     config[listKey].push(emptyItem());
     onChange(config);
@@ -74,7 +112,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
   var listWrap = document.createElement("div");
   listWrap.className = "editor-items";
-  listWrap.dataset.navList = "";                           // ← NEW
+  listWrap.dataset.navList = "";
   container.appendChild(listWrap);
 
   if (!items.length) {
@@ -96,12 +134,11 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   items.forEach(function (item, index) {
     var card = document.createElement("div");
     card.className = "editor-card";
-    card.dataset.navItem = "";                                 // ← NEW
-    card.tabIndex = -1;   // makes card focusable so item.focus() works
+    card.dataset.navItem = "";
+    card.tabIndex = -1;
     card.draggable = true;
     card.dataset.index = index;
 
-    // Split fields into two rows: first two fields (title+url) and rest (badge+health)
     var row1Fields = fields.slice(0, 2);
     var row2Fields = fields.slice(2);
 
@@ -129,7 +166,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
       '<div class="editor-grid editor-grid-2col">' + row1Html + '</div>' +
       (row2Html ? '<div class="editor-grid editor-grid-meta">' + row2Html + '</div>' : '');
 
-    // Drag-and-drop reordering
     card.addEventListener("dragstart", function (e) {
       dragSrcIndex = index;
       card.classList.add("editor-card-dragging");
@@ -165,7 +201,7 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
     });
 
     card.querySelectorAll("[data-field]").forEach(function (inp) {
-      inp.dataset.navField = "";                               // ← NEW
+      inp.dataset.navField = "";
       inp.addEventListener("input", function (e) {
         item[e.target.dataset.field] = e.target.value;
         onChange(config);

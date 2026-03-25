@@ -1,5 +1,16 @@
 /* ── Clock widget plugin ── */
 
+Hub.injectStyles("widget-clock", `
+  .widget-clock { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .clock-time {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+  }
+  .clock-date { font-size: 0.76rem; color: var(--muted); }
+`);
+
 Hub.registry.register("clock", {
   label: "Clock",
   icon: "\u231A",
@@ -12,7 +23,6 @@ Hub.registry.register("clock", {
       '<div class="clock-time">' + Hub.escapeHtml(time) + '</div>' +
       '<div class="clock-date">' + Hub.escapeHtml(date) + '</div>';
 
-    /* Auto-refresh */
     if (!container._clockInterval) {
       container._clockInterval = setInterval(function () {
         var n = new Date();

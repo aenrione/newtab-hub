@@ -1,5 +1,39 @@
 /* ── Feeds widget plugin ── */
 
+Hub.injectStyles("widget-feeds", `
+  .feed-sections { display: grid; gap: 10px; }
+  .feed-source {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 0.76rem;
+  }
+  .feed-source strong { color: var(--muted-strong); font-size: 0.76rem; }
+  .feed-site-link { color: var(--accent-2); text-decoration: none; font-size: 0.7rem; }
+  .feed-rows { display: grid; gap: 1px; }
+  .feed-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.86rem;
+    transition: background 80ms;
+  }
+  .feed-row:hover { background: var(--surface-hover); }
+  .feed-headline {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .feed-date { color: var(--muted); font-size: 0.68rem; flex-shrink: 0; }
+`);
+
 Hub.registry.register("feeds", {
   label: "Feeds",
   icon: "\u25A3",
