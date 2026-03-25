@@ -31,7 +31,9 @@ Hub.registry.register("sonarr", {
     var days = Math.max(1, Math.min(30, parseInt(config.days, 10) || 7));
     var today = new Date();
     var start = sonarrFormatDate(today);
-    var end = sonarrFormatDate(new Date(today.getTime() + days * 86400000));
+    var endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + days);
+    var end = sonarrFormatDate(endDate);
     var base = (config.url || "http://localhost:8989").replace(/\/$/, "");
 
     /* ── 3. Fetch ── */
@@ -72,7 +74,8 @@ Hub.registry.register("sonarr", {
     });
 
     var todayStr = today.toDateString();
-    var tomorrow = new Date(today.getTime() + 86400000);
+    var tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
     var tomorrowStr = tomorrow.toDateString();
 
     /* ── 7. Render list ── */
@@ -82,7 +85,7 @@ Hub.registry.register("sonarr", {
       var dayLabel;
       if (key === todayStr) dayLabel = "Today";
       else if (key === tomorrowStr) dayLabel = "Tomorrow";
-      else dayLabel = g.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      else dayLabel = g.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
       html += '<div class="sonarr-day">' + Hub.escapeHtml(dayLabel) + "</div>";
 
