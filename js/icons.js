@@ -31,5 +31,6 @@ Hub.iconForType = {
   "markets": "trendingUp",
   "feeds": "rss",
   "search": "search",
-  "todo": "checkSquare"
+  "todo": "checkSquare",
+  "sonarr": "clock"
 };
