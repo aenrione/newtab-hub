@@ -247,6 +247,111 @@ Hub.grid = (function () {
       w.config = newConfig;
     }, { onRebuild: function () { editorKeyboard.rescan(); } });
 
+    /* ── Card color section ── */
+    (function () {
+      var DEFAULT_H = 220, DEFAULT_L = 16, SAT = 30;
+
+      function colorStr(h, l) {
+        return "hsl(" + h + "," + SAT + "%," + l + "%)";
+      }
+
+      var widgetEl = document.getElementById("widget-" + widgetId);
+      var existing = w.cardColor || null;
+      var hueVal = existing ? existing.h : DEFAULT_H;
+      var lightVal = existing ? existing.l : DEFAULT_L;
+
+      var section = document.createElement("div");
+      section.className = "card-color-section";
+
+      var sectionLabel = document.createElement("p");
+      sectionLabel.className = "customize-label";
+      sectionLabel.textContent = "Card color";
+      section.appendChild(sectionLabel);
+
+      /* Hue row */
+      var hueRow = document.createElement("div");
+      hueRow.className = "style-control-row";
+      var hueLabel = document.createElement("span");
+      hueLabel.textContent = "Hue";
+      var hueSlider = document.createElement("input");
+      hueSlider.type = "range";
+      hueSlider.className = "card-hue-slider";
+      hueSlider.min = "0";
+      hueSlider.max = "360";
+      hueSlider.value = hueVal;
+      var swatchCol = document.createElement("span");
+      swatchCol.className = "card-color-swatch-col";
+      var swatch = document.createElement("span");
+      swatch.className = "card-color-swatch";
+      if (existing) swatch.style.background = colorStr(hueVal, lightVal);
+      swatchCol.appendChild(swatch);
+      hueRow.appendChild(hueLabel);
+      hueRow.appendChild(hueSlider);
+      hueRow.appendChild(swatchCol);
+      section.appendChild(hueRow);
+
+      /* Brightness row */
+      var lightRow = document.createElement("div");
+      lightRow.className = "style-control-row";
+      var lightLabel = document.createElement("span");
+      lightLabel.textContent = "Brightness";
+      var lightSlider = document.createElement("input");
+      lightSlider.type = "range";
+      lightSlider.className = "card-lightness-slider";
+      lightSlider.min = "8";
+      lightSlider.max = "28";
+      lightSlider.value = lightVal;
+      var lightDisplay = document.createElement("span");
+      lightDisplay.className = "style-value";
+      lightDisplay.textContent = lightVal + "%";
+      lightRow.appendChild(lightLabel);
+      lightRow.appendChild(lightSlider);
+      lightRow.appendChild(lightDisplay);
+      section.appendChild(lightRow);
+
+      /* Update brightness slider track to reflect current hue */
+      function updateLightnessTrack(h) {
+        lightSlider.style.background = "linear-gradient(to right," +
+          "hsl(" + h + "," + SAT + "%,8%)," +
+          "hsl(" + h + "," + SAT + "%,28%))";
+      }
+      updateLightnessTrack(hueVal);
+
+      function applyColor() {
+        var h = parseInt(hueSlider.value);
+        var l = parseInt(lightSlider.value);
+        swatch.style.background = colorStr(h, l);
+        lightDisplay.textContent = l + "%";
+        updateLightnessTrack(h);
+        w.cardColor = { h: h, l: l };
+        if (widgetEl) widgetEl.style.setProperty("--widget-surface", colorStr(h, l));
+      }
+
+      hueSlider.addEventListener("input", applyColor);
+      lightSlider.addEventListener("input", applyColor);
+
+      /* Reset row */
+      var resetRow = document.createElement("div");
+      resetRow.className = "card-color-reset-row";
+      var resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "toolbar-button toolbar-button-ghost";
+      resetBtn.textContent = "Reset to global";
+      resetBtn.addEventListener("click", function () {
+        delete w.cardColor;
+        hueSlider.value = DEFAULT_H;
+        lightSlider.value = DEFAULT_L;
+        swatch.style.background = "";
+        lightDisplay.textContent = DEFAULT_L + "%";
+        updateLightnessTrack(DEFAULT_H);
+        if (widgetEl) widgetEl.style.removeProperty("--widget-surface");
+      });
+      resetRow.appendChild(resetBtn);
+      section.appendChild(resetRow);
+
+      body.appendChild(section);
+    })();
+
     // Inject credential fields if declared
     if (plugin.credentialFields && plugin.credentialFields.length > 0) {
       Hub.credentials.load(widgetId).then(function (savedCreds) {

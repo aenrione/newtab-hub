@@ -206,6 +206,9 @@
     el.id = "widget-" + w.id;
     el.dataset.widgetId = w.id;
     el.dataset.widgetType = w.type;
+    if (w.cardColor) {
+      el.style.setProperty("--widget-surface", "hsl(" + w.cardColor.h + ",30%," + w.cardColor.l + "%)");
+    }
     return el;
   }
 
@@ -639,7 +642,7 @@
         var p = posById[w.id] || {};
         return { id: w.id, col: p.col || w.col, row: p.row || w.row,
                  width: p.width || w.width, height: p.height || w.height,
-                 config: w.config };
+                 config: w.config, cardColor: w.cardColor || null };
       });
       return hashString(JSON.stringify(state));
     }
