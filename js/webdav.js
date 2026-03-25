@@ -51,13 +51,17 @@ self.webdav = (function () {
     }
   }
 
-  async function putOnce(url, username, password, body) {
+  async function putOnce(url, username, password, body, options) {
+    options = options || {};
+    var headers = {
+      "Authorization": authHeader(username, password),
+      "Content-Type": "application/json"
+    };
+    if (options.ifMatch) headers["If-Match"] = options.ifMatch;
+    if (options.ifNoneMatch) headers["If-None-Match"] = options.ifNoneMatch;
     return fetch(url, {
       method: "PUT",
-      headers: {
-        "Authorization": authHeader(username, password),
-        "Content-Type": "application/json"
-      },
+      headers: headers,
       body: body
     });
   }
@@ -68,19 +72,22 @@ self.webdav = (function () {
     return resp.headers.get("ETag") || resp.headers.get("Last-Modified") || null;
   }
 
-  async function upload(url, username, password, payload) {
+  async function upload(url, username, password, payload, options) {
     url = normalizeUrl(url);
+    options = options || {};
     try {
       var body = JSON.stringify(payload);
-      var resp = await putOnce(url, username, password, body);
+      var resp = await putOnce(url, username, password, body, options);
       if (resp.status === 401) return normalize(false, 401, "Invalid credentials");
+      if (resp.status === 412) return normalize(false, 412, "Remote config changed; refusing to overwrite newer cloud data");
 
       /* 404 or 409 usually means the parent directory doesn't exist — try MKCOL then retry */
       if (resp.status === 404 || resp.status === 409) {
         var ok = await mkcol(parentUrl(url), username, password);
         if (!ok) return normalize(false, resp.status, "Upload failed: parent directory could not be created (server returned " + resp.status + ")");
-        resp = await putOnce(url, username, password, body);
+        resp = await putOnce(url, username, password, body, options);
         if (resp.status === 401) return normalize(false, 401, "Invalid credentials");
+        if (resp.status === 412) return normalize(false, 412, "Remote config changed; refusing to overwrite newer cloud data");
       }
 
       if (!resp.ok) return normalize(false, resp.status, "Upload failed: server returned " + resp.status);

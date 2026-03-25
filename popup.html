@@ -55,6 +55,54 @@
     .status-line.ok { color: #6a9; }
     .status-line.error { color: #c77; }
     .status-line.syncing { color: #9af; }
+    .status-line.conflict { color: #e0b35a; }
+    .status-line.dirty { color: #e7d18a; }
+    .status-hint {
+      font-size: 10px;
+      color: #8f8f8f;
+      margin: -4px 0 10px;
+      min-height: 12px;
+    }
+    .backup-panel {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #303030;
+    }
+    .backup-title {
+      font-size: 11px;
+      color: #bdbdbd;
+      margin-bottom: 8px;
+    }
+    .backup-empty {
+      font-size: 11px;
+      color: #8f8f8f;
+    }
+    .backup-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .backup-item {
+      border: 1px solid #343434;
+      border-radius: 5px;
+      background: #222;
+      padding: 7px 8px;
+    }
+    .backup-meta {
+      font-size: 11px;
+      color: #dfdfdf;
+      margin-bottom: 2px;
+    }
+    .backup-reason {
+      font-size: 10px;
+      color: #919191;
+      margin-bottom: 6px;
+    }
+    .backup-item button {
+      margin-bottom: 0;
+      padding: 5px 7px;
+      font-size: 11px;
+    }
     a.edit-link {
       display: block;
       font-size: 11px;
@@ -96,8 +144,14 @@
   <!-- Status view -->
   <div id="view-status" class="hidden">
     <div id="status-line" class="status-line"></div>
+    <div id="status-hint" class="status-hint"></div>
     <button id="btn-upload" class="primary">Upload Now</button>
     <button id="btn-download">Download Now</button>
+    <div id="backup-panel" class="backup-panel hidden">
+      <div class="backup-title">Local safety backups</div>
+      <div id="backup-list" class="backup-list"></div>
+      <div id="backup-empty" class="backup-empty hidden">No local backups yet.</div>
+    </div>
     <a class="edit-link" id="btn-edit">Edit connection</a>
   </div>
 

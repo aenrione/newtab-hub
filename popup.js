@@ -12,11 +12,16 @@ var inpUser     = document.getElementById("inp-user");
 var inpPass     = document.getElementById("inp-pass");
 var msgEl       = document.getElementById("msg");
 var statusLine  = document.getElementById("status-line");
+var statusHint  = document.getElementById("status-hint");
 var btnTest     = document.getElementById("btn-test");
 var btnSave     = document.getElementById("btn-save");
 var btnUpload   = document.getElementById("btn-upload");
 var btnDownload = document.getElementById("btn-download");
 var btnEdit     = document.getElementById("btn-edit");
+var backupPanel = document.getElementById("backup-panel");
+var backupList  = document.getElementById("backup-list");
+var backupEmpty = document.getElementById("backup-empty");
+var currentSyncData = {};
 
 /* ── Storage helpers ── */
 
@@ -44,21 +49,85 @@ function setButtons(disabled) {
   btnDownload.disabled = disabled;
 }
 
+function formatReason(reason) {
+  if (reason === "before-download") return "Saved before replacing local settings";
+  if (reason === "before-restore") return "Saved before restoring an older backup";
+  return reason || "Local snapshot";
+}
+
+function formatBackupTime(iso) {
+  if (!iso) return "Unknown time";
+  return new Date(iso).toLocaleString();
+}
+
+function renderBackups(backups) {
+  backups = Array.isArray(backups) ? backups : [];
+  backupList.innerHTML = "";
+  backupPanel.classList.toggle("hidden", backups.length === 0);
+  backupEmpty.classList.toggle("hidden", backups.length !== 0);
+  backups.forEach(function (backup) {
+    var item = document.createElement("div");
+    item.className = "backup-item";
+
+    var meta = document.createElement("div");
+    meta.className = "backup-meta";
+    meta.textContent = formatBackupTime(backup.createdAt);
+
+    var reason = document.createElement("div");
+    reason.className = "backup-reason";
+    reason.textContent = formatReason(backup.reason);
+
+    var restoreBtn = document.createElement("button");
+    restoreBtn.type = "button";
+    restoreBtn.textContent = "Restore this backup";
+    restoreBtn.addEventListener("click", async function () {
+      if (!confirm("Restore this local backup? Your current settings will be snapshotted first and the restored state will stay local until you upload it.")) return;
+      setButtons(true);
+      restoreBtn.disabled = true;
+      var resp = await sendToBackground({ action: "restoreLocalBackup", id: backup.id });
+      if (resp.error) { disableWithError(); return; }
+    });
+
+    item.appendChild(meta);
+    item.appendChild(reason);
+    item.appendChild(restoreBtn);
+    backupList.appendChild(item);
+  });
+}
+
 function formatStatus(data) {
   var status = data["new-tab-sync-status"];
   var last   = data["new-tab-sync-last"];
   var err    = data["new-tab-sync-error"];
+  var dirty  = !!data["new-tab-sync-dirty"];
 
   setButtons(status === "syncing");
+  statusHint.textContent = "";
 
   if (status === "syncing") {
     statusLine.className = "status-line syncing";
     statusLine.textContent = "Syncing…";
+    if (dirty) statusHint.textContent = "Local edits are queued while sync runs.";
     return;
   }
   if (status === "error") {
     statusLine.className = "status-line error";
     statusLine.textContent = "Error: " + (err || "unknown");
+    if (dirty) statusHint.textContent = "Local changes are still waiting to be uploaded.";
+    return;
+  }
+  if (status === "conflict") {
+    statusLine.className = "status-line conflict";
+    statusLine.textContent = "Conflict: " + (err || "Local and cloud changed");
+    statusHint.textContent = "Upload to keep local changes or download to replace them. A backup is kept before destructive restores.";
+    return;
+  }
+  if (dirty) {
+    statusLine.className = "status-line dirty";
+    statusLine.textContent = "Unsynced local changes";
+    statusHint.textContent = last
+      ? "Last clean sync: " + new Date(last).toLocaleString()
+      : "These edits exist only on this device until you upload them.";
     return;
   }
   statusLine.className = "status-line ok";
@@ -80,8 +149,10 @@ function showConfigView(url, username) {
 function showStatusView(storageData) {
   viewConfig.classList.add("hidden");
   viewStatus.classList.remove("hidden");
+  currentSyncData = storageData || {};
   setButtons(false);
   formatStatus(storageData);
+  renderBackups(currentSyncData["new-tab-sync-local-backups"] || []);
 }
 
 function disableWithError() {
@@ -155,11 +226,12 @@ async function forceSave(url, user, pass) {
 async function init() {
   var data = await storageGet([
     WEBDAV_URL_KEY, WEBDAV_USER_KEY,
-    "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"
+    "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-local-backups"
   ]);
 
   if (data[WEBDAV_URL_KEY]) {
     showStatusView(data);
+    renderBackups(data["new-tab-sync-local-backups"] || []);
   } else {
     showConfigView(null, null);
   }
@@ -168,7 +240,7 @@ async function init() {
      to avoid a redundant storageGet round-trip and stale-render risk. */
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== "local") return;
-    var syncKeys = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"];
+    var syncKeys = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-local-backups"];
     if (!syncKeys.some(function (k) { return changes[k]; })) return;
     var snapshot = {
       "new-tab-sync-status": changes["new-tab-sync-status"]
@@ -176,11 +248,17 @@ async function init() {
       "new-tab-sync-last": changes["new-tab-sync-last"]
         ? changes["new-tab-sync-last"].newValue : data["new-tab-sync-last"],
       "new-tab-sync-error": changes["new-tab-sync-error"]
-        ? changes["new-tab-sync-error"].newValue : data["new-tab-sync-error"]
+        ? changes["new-tab-sync-error"].newValue : data["new-tab-sync-error"],
+      "new-tab-sync-dirty": changes["new-tab-sync-dirty"]
+        ? changes["new-tab-sync-dirty"].newValue : data["new-tab-sync-dirty"],
+      "new-tab-sync-local-backups": changes["new-tab-sync-local-backups"]
+        ? changes["new-tab-sync-local-backups"].newValue : data["new-tab-sync-local-backups"]
     };
     /* Keep data in sync for future events */
     Object.assign(data, snapshot);
+    currentSyncData = data;
     formatStatus(snapshot);
+    renderBackups(snapshot["new-tab-sync-local-backups"] || []);
   });
 }
 
@@ -230,17 +308,29 @@ btnEdit.addEventListener("click", async function () {
 });
 
 btnUpload.addEventListener("click", async function () {
+  var action = "syncUpload";
+  if (viewStatus.classList.contains("hidden")) return;
+  if (statusLine.classList.contains("conflict")) {
+    if (!confirm("This will overwrite the cloud copy with your local settings. Continue?")) return;
+    action = "syncUploadForce";
+  }
   setButtons(true);
-  var resp = await sendToBackground({ action: "syncUpload" });
+  var resp = await sendToBackground({ action: action });
   if (resp.error) { disableWithError(); return; }
   /* Buttons stay disabled; formatStatus re-enables them via storage.onChanged
      once the background reports the final status (idle or error). */
 });
 
 btnDownload.addEventListener("click", async function () {
-  if (!confirm("This will replace all your current settings. Continue?")) return;
+  var action = "syncDownload";
+  var prompt = "This will replace all your current settings. Continue?";
+  if (statusLine.classList.contains("conflict") || !!currentSyncData["new-tab-sync-dirty"]) {
+    prompt = "This will replace your local settings with the cloud copy and save a local backup first. Continue?";
+    action = "syncDownloadForce";
+  }
+  if (!confirm(prompt)) return;
   setButtons(true);
-  var resp = await sendToBackground({ action: "syncDownload" });
+  var resp = await sendToBackground({ action: action });
   if (resp.error) { disableWithError(); return; }
   /* Buttons stay disabled; formatStatus re-enables them via storage.onChanged
      once the background reports the final status (idle or error). */

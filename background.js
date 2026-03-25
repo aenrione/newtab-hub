@@ -13,10 +13,15 @@ var SYNC_TRIGGER_SKIP = {
   "new-tab-sync-error": 1,
   "new-tab-sync-auth-failed": 1,
   "new-tab-sync-pending": 1,
-  "new-tab-sync-remote-etag": 1
+  "new-tab-sync-remote-etag": 1,
+  "new-tab-sync-dirty": 1,
+  "new-tab-sync-local-backups": 1
 };
 
 var SYNC_ETAG_KEY = "new-tab-sync-remote-etag";
+var SYNC_DIRTY_KEY = "new-tab-sync-dirty";
+var SYNC_BACKUPS_KEY = "new-tab-sync-local-backups";
+var MAX_LOCAL_BACKUPS = 5;
 
 var PAYLOAD_SKIP_EXACT = {
   "new-tab-cache": 1,
@@ -45,10 +50,124 @@ function storageSet(obj) {
   });
 }
 
+function storageRemove(keys) {
+  return new Promise(function (resolve) {
+    chrome.storage.local.remove(keys, resolve);
+  });
+}
+
 function storageGetAll() {
   return new Promise(function (resolve) {
     chrome.storage.local.get(null, function (r) { resolve(r || {}); });
   });
+}
+
+async function setConflict(message) {
+  await storageSet({
+    "new-tab-sync-status": "conflict",
+    "new-tab-sync-error": message,
+    "new-tab-sync-pending": false
+  });
+}
+
+async function saveLocalBackup(reason) {
+  var all = await storageGetAll();
+  var backups = await storageGet(SYNC_BACKUPS_KEY) || [];
+  backups.unshift({
+    id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+    createdAt: new Date().toISOString(),
+    reason: reason || "before-download",
+    payload: buildPayload(all)
+  });
+  if (backups.length > MAX_LOCAL_BACKUPS) backups = backups.slice(0, MAX_LOCAL_BACKUPS);
+  await storageSet((function () {
+    var update = {};
+    update[SYNC_BACKUPS_KEY] = backups;
+    return update;
+  }()));
+}
+
+function mergeObjectEntries(localValue, remoteValue) {
+  if (!remoteValue || typeof remoteValue !== "object" || Array.isArray(remoteValue)) return remoteValue;
+  if (!localValue || typeof localValue !== "object" || Array.isArray(localValue)) return remoteValue;
+  return Object.assign({}, localValue, remoteValue);
+}
+
+async function applyLocalPayload(payload, options) {
+  options = options || {};
+  var markDirty = !!options.markDirty;
+  var clearRemoteBase = !!options.clearRemoteBase;
+  var preserveLocalEntries = options.preserveLocalEntries !== false;
+  var all = await storageGetAll();
+  var incoming = payload && payload.data;
+  if (!incoming || typeof incoming !== "object") throw new Error("Backup payload is invalid");
+
+  var toWrite = {};
+  Object.keys(incoming).forEach(function (k) {
+    if (!k.startsWith("new-tab-") || !isPayloadKey(k)) return;
+    toWrite[k] = incoming[k];
+  });
+
+  var objectMergeKeys = [
+    "new-tab-bg-image",
+    "new-tab-collapsed-groups",
+    "new-tab-color-scheme",
+    "new-tab-style-overrides",
+    "new-tab-zen-settings"
+  ];
+  objectMergeKeys.forEach(function (key) {
+    if (preserveLocalEntries && toWrite[key] && all[key]) {
+      toWrite[key] = mergeObjectEntries(all[key], toWrite[key]);
+    }
+  });
+
+  if (preserveLocalEntries && toWrite["new-tab-profiles"]) {
+    var localProfiles = all["new-tab-profiles"] || {};
+    var remoteProfiles = toWrite["new-tab-profiles"];
+    var mergedProfiles = Object.assign({}, localProfiles);
+    Object.keys(remoteProfiles).forEach(function (id) {
+      if (!mergedProfiles[id]) {
+        mergedProfiles[id] = remoteProfiles[id];
+      } else {
+        var localTime  = mergedProfiles[id]._savedAt || 0;
+        var remoteTime = remoteProfiles[id]._savedAt || 0;
+        if (remoteTime > localTime) mergedProfiles[id] = remoteProfiles[id];
+      }
+    });
+    toWrite["new-tab-profiles"] = mergedProfiles;
+  }
+
+  if (preserveLocalEntries && toWrite["new-tab-profile-overrides"]) {
+    var localOverrides = all["new-tab-profile-overrides"] || {};
+    var remoteOverrides = toWrite["new-tab-profile-overrides"];
+    var mergedOverrides = Object.assign({}, localOverrides);
+    Object.keys(remoteOverrides).forEach(function (id) {
+      if (!mergedOverrides[id]) {
+        mergedOverrides[id] = remoteOverrides[id];
+      } else {
+        var localOvTime  = mergedOverrides[id]._savedAt || 0;
+        var remoteOvTime = remoteOverrides[id]._savedAt || 0;
+        if (remoteOvTime > localOvTime) mergedOverrides[id] = remoteOverrides[id];
+      }
+    });
+    toWrite["new-tab-profile-overrides"] = mergedOverrides;
+  }
+
+  if (Object.keys(toWrite).length === 0) throw new Error("Backup payload was empty after filtering");
+
+  toWrite["new-tab-sync-status"] = "idle";
+  toWrite["new-tab-sync-error"] = null;
+  toWrite["new-tab-sync-pending"] = false;
+  toWrite["new-tab-sync-auth-failed"] = false;
+  toWrite[SYNC_DIRTY_KEY] = markDirty;
+  if (!markDirty) toWrite["new-tab-sync-last"] = new Date().toISOString();
+
+  var removable = Object.keys(all).filter(function (k) { return k.startsWith("new-tab-") && isPayloadKey(k) && !Object.prototype.hasOwnProperty.call(toWrite, k); });
+  isSuppressingUpload = true;
+  if (removable.length) await storageRemove(removable);
+  if (clearRemoteBase) await storageRemove([SYNC_ETAG_KEY]);
+  await storageSet(toWrite);
+  setTimeout(function () { isSuppressingUpload = false; }, 0);
 }
 
 /* ── Payload builder ── */
@@ -82,7 +201,10 @@ function buildPayload(all) {
 
 /* ── Core upload ── */
 
-async function doUpload(isManual) {
+async function doUpload(isManual, options) {
+  options = options || {};
+  var force = !!options.force;
+
   /* Clear pending flag immediately — prevents a duplicate run if both the
      setTimeout path and the alarm safety-net path somehow both fire.
      Trade-off: if the SW is killed after this line but before the upload
@@ -93,23 +215,60 @@ async function doUpload(isManual) {
   var url = await storageGet("new-tab-webdav-url");
   var username = await storageGet("new-tab-webdav-username");
   var password = await storageGet("new-tab-webdav-password");
+  var baseEtag = await storageGet(SYNC_ETAG_KEY);
 
   if (!url || !username) return;
+
+  var uploadOptions = {};
+  if (!force) {
+    var check = await webdav.check(url, username, password || "");
+    if (check.status === 401) {
+      await storageSet({
+        "new-tab-sync-status": "error",
+        "new-tab-sync-error": "Invalid credentials",
+        "new-tab-sync-auth-failed": true,
+        "new-tab-sync-pending": false
+      });
+      return;
+    }
+    if (check.status === 404) {
+      uploadOptions.ifNoneMatch = "*";
+    } else if (!check.ok) {
+      await storageSet({
+        "new-tab-sync-status": "error",
+        "new-tab-sync-error": check.message,
+        "new-tab-sync-pending": false
+      });
+      return;
+    } else if (!check.etag) {
+      await setConflict("Cloud sync needs ETag or Last-Modified support before it can safely upload");
+      return;
+    } else if (!baseEtag) {
+      await setConflict("Cloud config already exists for this path. Download first or force an upload to replace it");
+      return;
+    } else if (check.etag !== baseEtag) {
+      await setConflict("Cloud config changed since this device last synced. Download first or force an upload to replace it");
+      return;
+    } else {
+      uploadOptions.ifMatch = baseEtag;
+    }
+  }
 
   await storageSet({ "new-tab-sync-status": "syncing" });
 
   var all = await storageGetAll();
   var payload = buildPayload(all);
-  var result = await webdav.upload(url, username, password || "", payload);
+  var result = await webdav.upload(url, username, password || "", payload, uploadOptions);
 
   if (result.ok) {
     var update = {
       "new-tab-sync-status": "idle",
       "new-tab-sync-last": new Date().toISOString(),
       "new-tab-sync-error": null,
-      "new-tab-sync-pending": false
+      "new-tab-sync-pending": false,
+      "new-tab-sync-dirty": false,
+      "new-tab-sync-auth-failed": false
     };
-    if (isManual) update["new-tab-sync-auth-failed"] = false;
     if (result.etag) update[SYNC_ETAG_KEY] = result.etag;
     await storageSet(update);
   } else if (result.status === 401) {
@@ -119,6 +278,8 @@ async function doUpload(isManual) {
       "new-tab-sync-auth-failed": true,
       "new-tab-sync-pending": false
     });
+  } else if (result.status === 412) {
+    await setConflict(result.message || "Cloud config changed during upload. Download first or force an upload to replace it");
   } else {
     await storageSet({
       "new-tab-sync-status": "error",
@@ -130,7 +291,10 @@ async function doUpload(isManual) {
 
 /* ── Core download ── */
 
-async function doDownload() {
+async function doDownload(options) {
+  options = options || {};
+  var force = !!options.force;
+
   /* Clear pending flag to prevent a debounced upload from overwriting data
      we're about to download from the server. */
   await storageSet({ "new-tab-sync-pending": false });
@@ -138,8 +302,14 @@ async function doDownload() {
   var url = await storageGet("new-tab-webdav-url");
   var username = await storageGet("new-tab-webdav-username");
   var password = await storageGet("new-tab-webdav-password");
+  var isDirty = !!(await storageGet(SYNC_DIRTY_KEY));
 
   if (!url || !username) return;
+  if (isDirty && !force) {
+    await setConflict("Local changes have not been uploaded yet. Upload first or force a download to replace local data");
+    return;
+  }
+  if (force) await saveLocalBackup("before-download");
 
   await storageSet({ "new-tab-sync-status": "syncing" });
   var result = await webdav.download(url, username, password || "");
@@ -161,70 +331,17 @@ async function doDownload() {
     return;
   }
 
-  /* Strip local-only keys before writing */
-  var toWrite = {};
-  Object.keys(downloaded.data).forEach(function (k) {
-    if (PAYLOAD_SKIP_EXACT[k]) return;
-    if (k.startsWith("new-tab-webdav-")) return;
-    if (k.startsWith("new-tab-sync-")) return;
-    if (k.startsWith("new-tab-creds-")) return;
-    toWrite[k] = downloaded.data[k];
-  });
-
-  /* Merge profiles: newer _savedAt wins; local-only profiles are preserved.
-     If neither side has a timestamp (legacy data), remote wins. */
-  if (toWrite["new-tab-profiles"]) {
-    var localProfiles = await storageGet("new-tab-profiles") || {};
-    var remoteProfiles = toWrite["new-tab-profiles"];
-    var mergedProfiles = Object.assign({}, localProfiles);
-    Object.keys(remoteProfiles).forEach(function (id) {
-      if (!mergedProfiles[id]) {
-        mergedProfiles[id] = remoteProfiles[id];
-      } else {
-        var localTime  = mergedProfiles[id]._savedAt || 0;
-        var remoteTime = remoteProfiles[id]._savedAt || 0;
-        if (remoteTime > localTime) mergedProfiles[id] = remoteProfiles[id];
-      }
-    });
-    toWrite["new-tab-profiles"] = mergedProfiles;
-  }
-
-  /* Merge overrides: same timestamp-based strategy. */
-  var overridesKey = "new-tab-profile-overrides";
-  if (toWrite[overridesKey]) {
-    var localOverrides  = await storageGet(overridesKey) || {};
-    var remoteOverrides = toWrite[overridesKey];
-    var mergedOverrides = Object.assign({}, localOverrides);
-    Object.keys(remoteOverrides).forEach(function (id) {
-      if (!mergedOverrides[id]) {
-        mergedOverrides[id] = remoteOverrides[id];
-      } else {
-        var localOvTime  = mergedOverrides[id]._savedAt || 0;
-        var remoteOvTime = remoteOverrides[id]._savedAt || 0;
-        if (remoteOvTime > localOvTime) mergedOverrides[id] = remoteOverrides[id];
-      }
-    });
-    toWrite[overridesKey] = mergedOverrides;
-  }
-
-  if (Object.keys(toWrite).length === 0) {
-    await storageSet({ "new-tab-sync-status": "error", "new-tab-sync-error": "Downloaded data was empty after filtering" });
+  try {
+    await applyLocalPayload(downloaded, { markDirty: false, clearRemoteBase: false, preserveLocalEntries: true });
+  } catch (err) {
+    await storageSet({ "new-tab-sync-status": "error", "new-tab-sync-error": err.message || "Downloaded data was empty after filtering" });
     return;
   }
-
-  toWrite["new-tab-sync-status"] = "idle";
-  toWrite["new-tab-sync-last"] = new Date().toISOString();
-  toWrite["new-tab-sync-error"] = null;
-  toWrite["new-tab-sync-auth-failed"] = false;
-  if (result.etag) toWrite[SYNC_ETAG_KEY] = result.etag;
-
-  /* Guard against re-upload: the storage write below will fire onChanged for
-     every dashboard key we just restored. Set isSuppressingUpload so the listener
-     ignores those changes — there is nothing new to push back up. */
-  isSuppressingUpload = true;
-  await storageSet(toWrite);
-  /* Reset after a tick to ensure onChanged has fired before we clear the guard. */
-  setTimeout(function () { isSuppressingUpload = false; }, 0);
+  if (result.etag) await storageSet((function () {
+    var update = {};
+    update[SYNC_ETAG_KEY] = result.etag;
+    return update;
+  }()));
 }
 
 /* ── Debounce ── */
@@ -235,6 +352,9 @@ var isSuppressingUpload = false; /* True while writing downloaded data or a loca
 async function scheduleUpload() {
   var authFailed = await storageGet("new-tab-sync-auth-failed");
   if (authFailed) return;
+
+  var status = await storageGet("new-tab-sync-status");
+  if (status === "conflict") return;
 
   var url = await storageGet("new-tab-webdav-url");
   if (!url) return;
@@ -291,6 +411,11 @@ chrome.storage.onChanged.addListener(function (changes, area) {
   });
   if (!relevant) return;
 
+  storageSet((function () {
+    var update = {};
+    update[SYNC_DIRTY_KEY] = true;
+    return update;
+  }())).catch(console.error);
   scheduleUpload().catch(console.error);
 });
 
@@ -333,6 +458,7 @@ async function doAutoDownload() {
   var url      = await storageGet("new-tab-webdav-url");
   var username = await storageGet("new-tab-webdav-username");
   var password = await storageGet("new-tab-webdav-password");
+  var isDirty  = !!(await storageGet(SYNC_DIRTY_KEY));
 
   if (!url || !username) return;
   if (await storageGet("new-tab-sync-auth-failed")) return;
@@ -346,6 +472,11 @@ async function doAutoDownload() {
 
   /* If we have a stored ETag and it matches the remote, nothing changed */
   if (remoteEtag && remoteEtag === storedEtag) return;
+
+  if (isDirty) {
+    await setConflict("Cloud config changed while this device still has unsynced local edits. Resolve the conflict in the sync popup");
+    return;
+  }
 
   await doDownload();
 }
@@ -383,8 +514,24 @@ chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   sendResponse({ received: true });
   if (msg.action === "syncUpload") {
     doUpload(true).catch(console.error);
+  } else if (msg.action === "syncUploadForce") {
+    doUpload(true, { force: true }).catch(console.error);
   } else if (msg.action === "syncDownload") {
     doDownload().catch(console.error);
+  } else if (msg.action === "syncDownloadForce") {
+    doDownload({ force: true }).catch(console.error);
+  } else if (msg.action === "restoreLocalBackup") {
+    (async function () {
+      try {
+        var backups = await storageGet(SYNC_BACKUPS_KEY) || [];
+        var backup = backups.find(function (item) { return item && item.id === msg.id; });
+        if (!backup) throw new Error("Backup not found");
+        await saveLocalBackup("before-restore");
+        await applyLocalPayload(backup.payload, { markDirty: true, clearRemoteBase: true, preserveLocalEntries: false });
+      } catch (err) {
+        await storageSet({ "new-tab-sync-status": "error", "new-tab-sync-error": err.message || "Backup restore failed" });
+      }
+    }()).catch(console.error);
   } else if (msg.action === "syncAutoDownload") {
     doAutoDownload().catch(console.error);
   }

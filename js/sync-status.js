@@ -10,6 +10,7 @@ Hub.syncStatus = (function () {
   var CLOUD_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>';
   var SPIN_SVG  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="sync-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
   var ALERT_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+  var CONFLICT_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>';
 
   /* ── State ── */
 
@@ -39,6 +40,7 @@ Hub.syncStatus = (function () {
     var status = storage["new-tab-sync-status"] || "idle";
     var last   = storage["new-tab-sync-last"] || null;
     var error  = storage["new-tab-sync-error"] || null;
+    var dirty  = !!storage["new-tab-sync-dirty"];
 
     /* Hide badge when no WebDAV URL is configured */
     if (!url) {
@@ -53,23 +55,37 @@ Hub.syncStatus = (function () {
 
     if (status === "syncing") {
       badge.classList.remove("is-error");
+      badge.classList.remove("is-conflict");
       iconEl.innerHTML = SPIN_SVG;
       labelEl.textContent = "";
       badge.title = "Syncing\u2026";
     } else if (status === "error") {
       badge.classList.add("is-error");
+      badge.classList.remove("is-conflict");
       iconEl.innerHTML = ALERT_SVG;
       labelEl.textContent = "Sync error";
       badge.title = error || "Unknown error";
+    } else if (status === "conflict") {
+      badge.classList.remove("is-error");
+      badge.classList.add("is-conflict");
+      iconEl.innerHTML = CONFLICT_SVG;
+      labelEl.textContent = "Conflict";
+      badge.title = error || "Local and cloud changes conflict";
     } else {
       badge.classList.remove("is-error");
+      badge.classList.remove("is-conflict");
       /* idle (default) */
-      var rel = relativeTime(last);
       iconEl.innerHTML = CLOUD_SVG;
-      labelEl.textContent = rel;
-      if (last) {
+      if (dirty) {
+        labelEl.textContent = "Local changes";
+        badge.title = last
+          ? "Unsynced local changes since " + new Date(last).toLocaleString()
+          : "Unsynced local changes on this device";
+      } else if (last) {
+        labelEl.textContent = relativeTime(last);
         badge.title = "Last synced: " + new Date(last).toLocaleString();
       } else {
+        labelEl.textContent = "Never synced";
         badge.title = "Never synced";
       }
     }
@@ -170,7 +186,7 @@ Hub.syncStatus = (function () {
 
   /* ── Storage change listener ── */
 
-  var WATCH_KEYS = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-webdav-url"];
+  var WATCH_KEYS = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-webdav-url"];
 
   function onStorageChanged(changes, area) {
     if (area !== "local") return;
@@ -197,6 +213,10 @@ Hub.syncStatus = (function () {
       kind = pendingToast;
       pendingToast = null;
       showToast(kind === "pull" ? "Pull failed: " + errMsg : "Push failed: " + errMsg);
+    } else if (status === "conflict") {
+      kind = pendingToast;
+      pendingToast = null;
+      showToast(kind === "pull" ? "Pull blocked: " + errMsg : "Push blocked: " + errMsg);
     }
   }
 
@@ -215,7 +235,7 @@ Hub.syncStatus = (function () {
     document.body.appendChild(toastContainer);
 
     /* Read initial storage and render */
-    storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error"])
+    storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty"])
       .then(function (storage) {
         currentData = storage;
         renderBadge(currentData);
