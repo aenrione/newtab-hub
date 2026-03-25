@@ -212,6 +212,7 @@ Hub.grid = (function () {
   }
 
   function removeWidget(widgetId, gridEl) {
+    Hub.credentials.clear(widgetId);
     if (!editClone) return;
     editClone = editClone.filter(function (w) { return w.id !== widgetId; });
     var el = gridEl.querySelector('[data-widget-id="' + widgetId + '"]');
@@ -245,6 +246,70 @@ Hub.grid = (function () {
     plugin.renderEditor(body, w.config || {}, function (newConfig) {
       w.config = newConfig;
     }, { onRebuild: function () { editorKeyboard.rescan(); } });
+
+    // Inject credential fields if declared
+    if (plugin.credentialFields && plugin.credentialFields.length > 0) {
+      Hub.credentials.load(widgetId).then(function (savedCreds) {
+        var section = document.createElement("div");
+        section.className = "widget-editor-credentials";
+
+        var hdr = document.createElement("div");
+        hdr.className = "widget-editor-credentials-header";
+        hdr.textContent = "Credentials";
+        section.appendChild(hdr);
+
+        plugin.credentialFields.forEach(function (field) {
+          var row = document.createElement("div");
+          row.className = "widget-editor-credentials-row";
+
+          var lbl = document.createElement("label");
+          lbl.textContent = field.label;
+
+          var wrap = document.createElement("div");
+          wrap.className = "widget-editor-credentials-input-wrap";
+
+          var input = document.createElement("input");
+          input.type = "password";
+          input.placeholder = field.placeholder || "";
+          input.autocomplete = "off";
+          if (savedCreds[field.key]) input.value = savedCreds[field.key];
+
+          var toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "widget-editor-credentials-toggle";
+          toggle.textContent = "Show";
+          toggle.addEventListener("click", function () {
+            var isHidden = input.type === "password";
+            input.type = isHidden ? "text" : "password";
+            toggle.textContent = isHidden ? "Hide" : "Show";
+          });
+
+          input.addEventListener("blur", function () {
+            if (input.value !== "") {
+              Hub.credentials.save(widgetId, { [field.key]: input.value });
+            }
+          });
+
+          wrap.appendChild(input);
+          wrap.appendChild(toggle);
+          row.appendChild(lbl);
+          row.appendChild(wrap);
+          section.appendChild(row);
+        });
+
+        var clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "widget-editor-credentials-clear";
+        clearBtn.textContent = "Remove credentials";
+        clearBtn.addEventListener("click", function () {
+          Hub.credentials.clear(widgetId);
+          section.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+        });
+        section.appendChild(clearBtn);
+
+        body.appendChild(section);
+      });
+    }
 
     var actions = document.createElement("div");
     actions.className = "config-modal-actions";

@@ -1371,6 +1371,62 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 .config-modal-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 4px; }
 .config-modal-actions { display: flex; justify-content: flex-end; gap: 6px; padding-top: 12px; flex-shrink: 0; }
 
+/* Credential fields in widget editor */
+.widget-editor-credentials {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.widget-editor-credentials-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.widget-editor-credentials-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.widget-editor-credentials-row label {
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.widget-editor-credentials-input-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.widget-editor-credentials-input-wrap input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.widget-editor-credentials-toggle,
+.widget-editor-credentials-clear {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.widget-editor-credentials-clear {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
 /* ── Edit bar add widget button ── */
 .edit-bar-add-btn {
   display: flex;
