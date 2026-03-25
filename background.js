@@ -253,7 +253,7 @@ async function scheduleUpload() {
     var pending = await storageGet("new-tab-sync-pending");
     if (!pending) return; /* Already handled */
     await doUpload(false);
-  }, 4000);
+  }, 2000);
 
   /* 1-minute safety net alarm — fires if SW is killed before setTimeout runs */
   chrome.alarms.create("webdav-sync-pending", { delayInMinutes: 1 });
