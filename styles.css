@@ -1523,12 +1523,14 @@ body:has(.shell.zen-mode) > #hub-bg-video {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 5px 12px;
-  text-decoration: none;
-  color: var(--text);
   gap: 8px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  transition: background 80ms;
 }
-a.sonarr-episode:hover { background: var(--surface); }
+a.sonarr-episode:hover { background: var(--surface-hover); }
 .sonarr-show { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sonarr-meta { color: var(--muted); font-size: 0.76rem; white-space: nowrap; flex-shrink: 0; }
 
