@@ -61,14 +61,13 @@ Hub.registry.register("sonarr", {
 
     var episodes, seriesMap;
     try {
-      var headers = { "X-Api-Key": creds.apiKey };
-      var results = await Promise.all([
-        fetch(base + "/api/v3/calendar?start=" + start + "&end=" + end, { headers: headers }),
-        fetch(base + "/api/v3/series", { headers: headers })
+      var store = state.store;
+      var opts = { headers: { "X-Api-Key": creds.apiKey } };
+      var calUrl = base + "/api/v3/calendar?start=" + start + "&end=" + end;
+      var parsed = await Promise.all([
+        Hub.cachedFetchJSON(calUrl, "sonarr", store, opts),
+        Hub.cachedFetchJSON(base + "/api/v3/series", "sonarr", store, opts)
       ]);
-      if (!results[0].ok) throw new Error("HTTP " + results[0].status);
-      if (!results[1].ok) throw new Error("HTTP " + results[1].status);
-      var parsed = await Promise.all([results[0].json(), results[1].json()]);
       episodes = parsed[0];
       seriesMap = {};
       parsed[1].forEach(function (s) { seriesMap[s.id] = s; });
