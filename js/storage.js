@@ -32,6 +32,11 @@ Hub.storageApi = function () {
             resolve(result || {});
           });
         });
+      },
+      async remove(key) {
+        return new Promise(function (resolve) {
+          chrome.storage.local.remove(key, resolve);
+        });
       }
     };
   }
@@ -55,6 +60,9 @@ Hub.storageApi = function () {
         catch (_) { result[key] = localStorage.getItem(key); }
       }
       return result;
+    },
+    async remove(key) {
+      localStorage.removeItem(key);
     }
   };
 };

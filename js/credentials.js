@@ -9,43 +9,12 @@
  */
 (function () {
   var PREFIX = "new-tab-creds-";
-
-  function storageGet(key) {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      return new Promise(function (resolve) {
-        chrome.storage.local.get([key], function (result) {
-          resolve(result ? result[key] : undefined);
-        });
-      });
-    }
-    try { return Promise.resolve(JSON.parse(localStorage.getItem(key))); }
-    catch (_) { return Promise.resolve(undefined); }
-  }
-
-  function storageSet(key, value) {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      return new Promise(function (resolve) {
-        chrome.storage.local.set({ [key]: value }, resolve);
-      });
-    }
-    localStorage.setItem(key, JSON.stringify(value));
-    return Promise.resolve();
-  }
-
-  function storageRemove(key) {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      return new Promise(function (resolve) {
-        chrome.storage.local.remove(key, resolve);
-      });
-    }
-    localStorage.removeItem(key);
-    return Promise.resolve();
-  }
+  var store = Hub.storageApi();
 
   Hub.credentials = {
     /** Load credentials for a widget instance. Resolves {} if none saved. */
     load: function (widgetId) {
-      return storageGet(PREFIX + widgetId).then(function (val) {
+      return store.get(PREFIX + widgetId).then(function (val) {
         return val || {};
       });
     },
@@ -53,13 +22,13 @@
     /** Merge obj into the stored credentials for this widget. */
     save: function (widgetId, obj) {
       return Hub.credentials.load(widgetId).then(function (existing) {
-        return storageSet(PREFIX + widgetId, Object.assign({}, existing, obj));
+        return store.set(PREFIX + widgetId, Object.assign({}, existing, obj));
       });
     },
 
     /** Delete all credentials for this widget. */
     clear: function (widgetId) {
-      return storageRemove(PREFIX + widgetId);
+      return store.remove(PREFIX + widgetId);
     }
   };
 }());
