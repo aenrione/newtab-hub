@@ -285,7 +285,9 @@ Hub.grid = (function () {
           });
 
           input.addEventListener("blur", function () {
-            Hub.credentials.save(widgetId, { [field.key]: input.value });
+            if (input.value !== "") {
+              Hub.credentials.save(widgetId, { [field.key]: input.value });
+            }
           });
 
           wrap.appendChild(input);
