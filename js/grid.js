@@ -212,8 +212,8 @@ Hub.grid = (function () {
   }
 
   function removeWidget(widgetId, gridEl) {
-    Hub.credentials.clear(widgetId);
     if (!editClone) return;
+    Hub.credentials.clear(widgetId);
     editClone = editClone.filter(function (w) { return w.id !== widgetId; });
     var el = gridEl.querySelector('[data-widget-id="' + widgetId + '"]');
     if (el) el.remove();
@@ -285,9 +285,7 @@ Hub.grid = (function () {
           });
 
           input.addEventListener("blur", function () {
-            if (input.value !== "") {
-              Hub.credentials.save(widgetId, { [field.key]: input.value });
-            }
+            Hub.credentials.save(widgetId, { [field.key]: input.value });
           });
 
           wrap.appendChild(input);
