@@ -229,7 +229,7 @@
         state.store.set(Hub.STORAGE_COLLAPSED_KEY, state.collapsedGroups);
       };
 
-      plugin.render(el, w.config || {}, state);
+      plugin.render(el, Object.assign({}, w.config || {}, { _id: w.id }), state);
     });
   }
 
@@ -286,7 +286,7 @@
         var el = widgetElements[w.id];
         var plugin = Hub.registry.get(w.type);
         if (el && plugin && plugin.load) {
-          loadPromises.push(plugin.load(el, w.config || {}, state, token));
+          loadPromises.push(plugin.load(el, Object.assign({}, w.config || {}, { _id: w.id }), state, token));
         }
       });
       loadPromises.push(runHealthChecks(widgets, token));
