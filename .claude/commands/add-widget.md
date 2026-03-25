@@ -49,8 +49,9 @@ If feasibility is confirmed → proceed to Step 3.
 Read one reference widget **in full** before writing any code:
 
 - `*arr` services (Radarr, Readarr, Lidarr, Prowlarr, etc.) → read `js/widgets/sonarr/index.js`
-- Token-authenticated REST APIs (GitHub, GitLab, etc.) → read `js/widgets/github-prs/index.js`
-- Simple stat/status REST APIs → read `js/widgets/sonarr/index.js`
+- Token-authenticated REST APIs where a single cached fetch suffices → read `js/widgets/sonarr/index.js`
+- Token-authenticated REST APIs requiring parallel fetches or custom cache keys → read `js/widgets/github-prs/index.js`
+- Simple stat/status REST APIs (local-network service, API key or no auth) → read `js/widgets/sonarr/index.js`
 
 Use the reference widget's exact code structure and style as your template.
 
@@ -85,7 +86,7 @@ Hub.registry.register("<name>", {
     };
   },
 
-  render: function (container, config, state) {
+  render: function (container, config) {
     container.innerHTML =
       '<div class="widget-header"><h2>' + Hub.escapeHtml(config.title || "<Default Title>") + '</h2></div>' +
       '<div class="<name>-body"><div class="empty-state">Loading\u2026</div></div>';
@@ -104,7 +105,8 @@ Hub.registry.register("<name>", {
 
     try {
       var data = await Hub.cachedFetchJSON(
-        (config.url || "<default>").replace(/\/$/, "") + "/api/v3/<endpoint>",
+        /* replace <api-path> with the actual endpoint, e.g. /api/v3/movie */
+        (config.url || "<default>").replace(/\/$/, "") + "/<api-path>",
         "<name>",
         state.store,
         { headers: { "<Auth-Header>": creds.<fieldKey> } }
@@ -152,6 +154,7 @@ Hub.registry.register("<name>", {
 - `credentialFields`: use `type: "password"` for secrets — never render credential inputs in `renderEditor`
 - `dataset.navHeaderField = ""` on the title input in `renderEditor`
 - If the widget shows navigable links: `state.links.push({ title: "...", href: "...", type: "<name>" })`
+- If the widget shows clickable link rows, use `Hub.createLink("css-class", href, title)` to build the `<a>` element — this automatically sets `data-focusable` and `data-title` for keyboard navigation
 - Cache category: pass the widget name string as the second argument to `Hub.cachedFetchJSON` / `Hub.cachedFetch`
 - Helper functions at bottom of file, named `function <name>SomeName(...)`
 
