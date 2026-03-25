@@ -27,6 +27,7 @@ function isPayloadKey(k) {
   if (PAYLOAD_SKIP_EXACT[k]) return false;
   if (k.startsWith("new-tab-webdav-")) return false;
   if (k.startsWith("new-tab-sync-")) return false;
+  if (k.startsWith("new-tab-creds-")) return false;
   return true;
 }
 
@@ -166,6 +167,7 @@ async function doDownload() {
     if (PAYLOAD_SKIP_EXACT[k]) return;
     if (k.startsWith("new-tab-webdav-")) return;
     if (k.startsWith("new-tab-sync-")) return;
+    if (k.startsWith("new-tab-creds-")) return;
     toWrite[k] = downloaded.data[k];
   });
 
@@ -285,7 +287,7 @@ chrome.storage.onChanged.addListener(function (changes, area) {
   /* Check if any non-excluded dashboard key changed */
   if (isSuppressingUpload) return;
   var relevant = Object.keys(changes).some(function (k) {
-    return k.startsWith("new-tab-") && !SYNC_TRIGGER_SKIP[k] && !k.startsWith("new-tab-sync-");
+    return k.startsWith("new-tab-") && !SYNC_TRIGGER_SKIP[k] && !k.startsWith("new-tab-sync-") && !k.startsWith("new-tab-creds-");
   });
   if (!relevant) return;
 
