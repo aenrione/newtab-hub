@@ -124,19 +124,12 @@ Hub.registry.register("reddit", {
     });
     container.appendChild(subLabel);
 
-    var sortLabel = document.createElement("label");
-    sortLabel.className = "editor-field";
-    var sortVal = config.sort || "hot";
-    sortLabel.innerHTML =
-      '<span>Sort</span>' +
-      '<select>' +
-        '<option value="hot"' + (sortVal === "hot" ? " selected" : "") + '>Hot</option>' +
-        '<option value="new"' + (sortVal === "new" ? " selected" : "") + '>New</option>' +
-        '<option value="top"' + (sortVal === "top" ? " selected" : "") + '>Top</option>' +
-        '<option value="rising"' + (sortVal === "rising" ? " selected" : "") + '>Rising</option>' +
-      '</select>';
-    sortLabel.querySelector("select").addEventListener("change", function (e) { config.sort = e.target.value; onChange(config); });
-    container.appendChild(sortLabel);
+    container.appendChild(Hub.createCustomSelect("Sort", [
+      { value: "hot", label: "Hot" },
+      { value: "new", label: "New" },
+      { value: "top", label: "Top" },
+      { value: "rising", label: "Rising" }
+    ], config.sort || "hot", function (v) { config.sort = v; onChange(config); }));
 
     var limitLabel = document.createElement("label");
     limitLabel.className = "editor-field";
@@ -146,6 +139,15 @@ Hub.registry.register("reddit", {
       if (n > 0 && n <= 25) { config.limit = n; onChange(config); }
     });
     container.appendChild(limitLabel);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      subreddit: { type: "string" },
+      sort: { type: "string", enum: ["hot", "new", "top", "rising"] },
+      limit: { type: "number", min: 1, max: 25 }
+    }
   },
 
   defaultConfig: function () {

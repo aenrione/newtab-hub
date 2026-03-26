@@ -157,17 +157,10 @@ Hub.registry.register("custom-api", {
     urlLabel.querySelector("input").addEventListener("input", function (e) { config.url = e.target.value; onChange(config); });
     container.appendChild(urlLabel);
 
-    var methodLabel = document.createElement("label");
-    methodLabel.className = "editor-field";
-    var methodVal = config.method || "GET";
-    methodLabel.innerHTML =
-      '<span>Method</span>' +
-      '<select>' +
-        '<option value="GET"' + (methodVal === "GET" ? " selected" : "") + '>GET</option>' +
-        '<option value="POST"' + (methodVal === "POST" ? " selected" : "") + '>POST</option>' +
-      '</select>';
-    methodLabel.querySelector("select").addEventListener("change", function (e) { config.method = e.target.value; onChange(config); });
-    container.appendChild(methodLabel);
+    container.appendChild(Hub.createCustomSelect("Method", [
+      { value: "GET", label: "GET" },
+      { value: "POST", label: "POST" }
+    ], config.method || "GET", function (v) { config.method = v; onChange(config); }));
 
     var limitLabel = document.createElement("label");
     limitLabel.className = "editor-field";
@@ -204,6 +197,16 @@ Hub.registry.register("custom-api", {
       { key: "key", label: "Header" },
       { key: "value", label: "Value" }
     ], function () { return { key: "", value: "" }; }, navOptions);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      url: { type: "string", required: true },
+      method: { type: "string", enum: ["GET", "POST"] },
+      limit: { type: "number", min: 1, max: 50 },
+      template: { type: "string" }
+    }
   },
 
   defaultConfig: function () {

@@ -188,27 +188,16 @@ Hub.registry.register("github-prs", {
       '<span>Widget title</span>' +
       '<input type="text" value="' + Hub.escapeHtml(config.title || "Pull Requests") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
-    var filterVal = config.filter || "authored";
-    var filterLabel = document.createElement("label");
-    filterLabel.className = "editor-field";
-    filterLabel.innerHTML =
-      '<span>Show PRs</span>' +
-      '<select>' +
-        '<option value="all"' + (filterVal === "all" ? " selected" : "") + '>All (review-req + authored)</option>' +
-        '<option value="review-requested"' + (filterVal === "review-requested" ? " selected" : "") + '>Review requested</option>' +
-        '<option value="authored"' + (filterVal === "authored" ? " selected" : "") + '>Authored by me</option>' +
-        '<option value="assigned"' + (filterVal === "assigned" ? " selected" : "") + '>Assigned to me</option>' +
-        '<option value="mentioned"' + (filterVal === "mentioned" ? " selected" : "") + '>Mentioning me</option>' +
-      '</select>';
-    filterLabel.querySelector("select").addEventListener("change", function (e) {
-      config.filter = e.target.value;
-      onChange(config);
-    });
-    container.appendChild(filterLabel);
+    container.appendChild(Hub.createCustomSelect("Show PRs", [
+      { value: "all", label: "All (review-req + authored)" },
+      { value: "review-requested", label: "Review requested" },
+      { value: "authored", label: "Authored by me" },
+      { value: "assigned", label: "Assigned to me" },
+      { value: "mentioned", label: "Mentioning me" }
+    ], config.filter || "authored", function (v) { config.filter = v; onChange(config); }));
 
     var limitLabel = document.createElement("label");
     limitLabel.className = "editor-field";
@@ -238,6 +227,14 @@ Hub.registry.register("github-prs", {
       onChange(config);
     });
     container.appendChild(reposLabel);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      filter: { type: "string", enum: ["all", "review-requested", "authored", "assigned", "mentioned"] },
+      limit: { type: "number", min: 1, max: 50 }
+    }
   },
 
   defaultConfig: function () {

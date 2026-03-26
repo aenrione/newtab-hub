@@ -109,17 +109,18 @@ Hub.registry.register("hacker-news", {
     });
     container.appendChild(limitLabel);
 
-    var sortLabel = document.createElement("label");
-    sortLabel.className = "editor-field";
-    var sortVal = config.sort || "top";
-    sortLabel.innerHTML =
-      '<span>Sort</span>' +
-      '<select>' +
-        '<option value="top"' + (sortVal === "top" ? " selected" : "") + '>Front page</option>' +
-        '<option value="new"' + (sortVal === "new" ? " selected" : "") + '>New</option>' +
-      '</select>';
-    sortLabel.querySelector("select").addEventListener("change", function (e) { config.sort = e.target.value; onChange(config); });
-    container.appendChild(sortLabel);
+    container.appendChild(Hub.createCustomSelect("Sort", [
+      { value: "top", label: "Front page" },
+      { value: "new", label: "New" }
+    ], config.sort || "top", function (v) { config.sort = v; onChange(config); }));
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      limit: { type: "number", min: 1, max: 30 },
+      sort: { type: "string", enum: ["top", "new"] }
+    }
   },
 
   defaultConfig: function () {

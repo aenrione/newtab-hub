@@ -132,7 +132,6 @@ Hub.registry.register("adguard", {
       "<span>Widget title</span>" +
       '<input type="text" value="' + Hub.escapeHtml(config.title || "AdGuard Home") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);

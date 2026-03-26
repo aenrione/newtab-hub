@@ -107,18 +107,11 @@ Hub.registry.register("lobsters", {
     titleLabel.querySelector("input").addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
-    var sortLabel = document.createElement("label");
-    sortLabel.className = "editor-field";
-    var sortVal = config.sort || "hottest";
-    sortLabel.innerHTML =
-      '<span>Sort</span>' +
-      '<select>' +
-        '<option value="hottest"' + (sortVal === "hottest" ? " selected" : "") + '>Hottest</option>' +
-        '<option value="newest"' + (sortVal === "newest" ? " selected" : "") + '>Newest</option>' +
-        '<option value="active"' + (sortVal === "active" ? " selected" : "") + '>Active</option>' +
-      '</select>';
-    sortLabel.querySelector("select").addEventListener("change", function (e) { config.sort = e.target.value; onChange(config); });
-    container.appendChild(sortLabel);
+    container.appendChild(Hub.createCustomSelect("Sort", [
+      { value: "hottest", label: "Hottest" },
+      { value: "newest", label: "Newest" },
+      { value: "active", label: "Active" }
+    ], config.sort || "hottest", function (v) { config.sort = v; onChange(config); }));
 
     var limitLabel = document.createElement("label");
     limitLabel.className = "editor-field";
@@ -142,6 +135,14 @@ Hub.registry.register("lobsters", {
       onChange(config);
     });
     container.appendChild(tagsLabel);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      sort: { type: "string", enum: ["hottest", "newest", "active"] },
+      limit: { type: "number", min: 1, max: 25 }
+    }
   },
 
   defaultConfig: function () {

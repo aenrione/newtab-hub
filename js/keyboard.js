@@ -202,6 +202,8 @@ Hub.keyboard = (function () {
       if (refreshBtn) {
         refreshBtn.setAttribute("data-chord-key", key.toUpperCase());
         refreshBtn.setAttribute("aria-keyshortcuts", key);
+        actions.insertBefore(badge, refreshBtn.nextSibling);
+        return;
       }
       (actions || target).appendChild(badge);
     });
@@ -280,6 +282,10 @@ Hub.keyboard = (function () {
       var themeSidebarOpen = document.querySelector(".theme-sidebar.is-open");
       if (themeSidebarOpen && !(key === "t" && !typing)) return;
 
+      /* Config sidebar (EditorKeyboard) owns all keys when it has focus */
+      var configSidebarEl = document.querySelector(".config-sidebar.is-open");
+      if (configSidebarEl && configSidebarEl.contains(document.activeElement)) return;
+
       if ((e.metaKey || e.ctrlKey) && key === "l") return;
       if ((e.metaKey || e.ctrlKey) && key === "k") {
         e.preventDefault();
@@ -342,7 +348,7 @@ Hub.keyboard = (function () {
         return;
       }
 
-      /* Edit mode keyboard controls: arrow keys move, shift+arrows resize, G config, X/Delete remove */
+      /* Edit mode keyboard controls: arrows move, shift+arrows resize, Enter/C config, Space grab */
       if (!typing && Hub.grid.isEditing() && !document.querySelector(".modal-overlay")) {
         if (Hub.grid.handleEditKey(e)) return;
       }

@@ -6,6 +6,7 @@ Hub.customize = (function () {
   /* ── Theme sidebar ── */
   var themeSidebar = null;
   var themeOverlay = null;
+  var _themeKeyboard = null;
 
   function ensureThemeSidebar() {
     if (themeSidebar) return themeSidebar;
@@ -23,8 +24,9 @@ Hub.customize = (function () {
   }
 
   function closeThemeSidebar() {
+    if (_themeKeyboard) { _themeKeyboard.detach(); _themeKeyboard = null; }
     if (themeSidebar) themeSidebar.classList.remove("is-open");
-    if (themeOverlay) themeOverlay.classList.remove("is-open");
+    document.body.classList.remove("theme-sidebar-open");
   }
 
   function startCaseLabel(key) {
@@ -33,24 +35,29 @@ Hub.customize = (function () {
       .replace(/^./, function (ch) { return ch.toUpperCase(); });
   }
 
-  function createThemeSection(sidebar, title, description) {
+  function createThemeSection(parent, title, description) {
     var section = document.createElement("section");
     section.className = "theme-section";
-    var header = document.createElement("div");
-    header.className = "theme-section-header";
-    header.innerHTML = '<h3>' + Hub.escapeHtml(title) + '</h3>' +
+    var sectionHeader = document.createElement("div");
+    sectionHeader.className = "theme-section-header";
+    sectionHeader.innerHTML = '<h3>' + Hub.escapeHtml(title) + '</h3>' +
       (description ? '<p>' + Hub.escapeHtml(description) + '</p>' : "");
-    var body = document.createElement("div");
-    body.className = "theme-section-body";
-    section.appendChild(header);
-    section.appendChild(body);
-    sidebar.appendChild(section);
-    return body;
+    var sectionBody = document.createElement("div");
+    sectionBody.className = "theme-section-body";
+    section.appendChild(sectionHeader);
+    section.appendChild(sectionBody);
+    parent.appendChild(section);
+    return sectionBody;
   }
 
   function openThemeSidebar(store, profileName) {
+    if (_themeKeyboard) { _themeKeyboard.detach(); _themeKeyboard = null; }
     var sidebar = ensureThemeSidebar();
     sidebar.replaceChildren();
+
+    /* Scrollable body wrapper */
+    var body = document.createElement("div");
+    body.className = "theme-sidebar-body";
 
     /* Header */
     var header = document.createElement("div");
@@ -58,14 +65,14 @@ Hub.customize = (function () {
     header.innerHTML = '<h2>Theme</h2><button class="theme-sidebar-close" type="button">&times;</button>';
     var closeButton = header.querySelector(".theme-sidebar-close");
     closeButton.addEventListener("click", closeThemeSidebar);
-    sidebar.appendChild(header);
+    body.appendChild(header);
 
     var intro = document.createElement("p");
     intro.className = "theme-sidebar-intro";
     intro.textContent = "Tune colors, background, shortcuts, and visual details for this dashboard.";
-    sidebar.appendChild(intro);
+    body.appendChild(intro);
 
-    var appearanceSection = createThemeSection(sidebar, "Theme Preset", "Start from a palette, then decide whether it applies everywhere or only here.");
+    var appearanceSection = createThemeSection(body,"Theme Preset", "Start from a palette, then decide whether it applies everywhere or only here.");
 
     /* Preset dropdown */
     var presetSection = document.createElement("div");
@@ -184,10 +191,15 @@ Hub.customize = (function () {
       '<label class="theme-scope-label"><input type="radio" name="theme-scope" value="global" checked /> Global</label>' +
       '<label class="theme-scope-label"><input type="radio" name="theme-scope" value="profile" /> This profile only</label>';
     appearanceSection.appendChild(scopeWrap);
+    store.get(Hub.STORAGE_THEME_KEY).then(function (savedTheme) {
+      var preferredScope = Hub.getPreferredThemeScope(savedTheme, profileName);
+      var preferredRadio = scopeWrap.querySelector('input[name="theme-scope"][value="' + preferredScope + '"]');
+      if (preferredRadio) preferredRadio.checked = true;
+    });
 
     /* Color pickers */
     var colorKeys = Object.keys(Hub.DEFAULT_COLORS).filter(function (k) { return Hub.DEFAULT_COLORS[k].startsWith("#"); });
-    var colorSection = createThemeSection(sidebar, "Colors", "Grouped by purpose so it is easier to understand what each token affects.");
+    var colorSection = createThemeSection(body,"Colors", "Grouped by purpose so it is easier to understand what each token affects.");
     var colorGroups = [
       { title: "Surfaces", keys: ["bg", "surface", "surfaceHover", "border", "borderStrong"] },
       { title: "Text", keys: ["text", "textMuted", "textMutedStrong"] },
@@ -196,6 +208,19 @@ Hub.customize = (function () {
     ];
     var grid = document.createElement("div");
     grid.className = "theme-color-groups";
+
+    function collectCurrentColors() {
+      var colors = {};
+      grid.querySelectorAll("[data-color-key]").forEach(function (inp) {
+        colors[inp.dataset.colorKey] = inp.value;
+      });
+      return colors;
+    }
+
+    function applyColorPreview(colors) {
+      Hub.applyColorScheme(colors || collectCurrentColors());
+    }
+
     colorGroups.forEach(function (group) {
       var availableKeys = group.keys.filter(function (key) { return colorKeys.includes(key); });
       if (!availableKeys.length) return;
@@ -207,23 +232,37 @@ Hub.customize = (function () {
       availableKeys.forEach(function (key) {
         var label = document.createElement("label");
         label.className = "theme-color-label";
-        label.innerHTML = '<span>' + Hub.escapeHtml(startCaseLabel(key)) + '</span><input type="color" data-color-key="' + key + '" value="' + Hub.escapeHtml(Hub.DEFAULT_COLORS[key]) + '" />';
+        label.innerHTML = '<span>' + Hub.escapeHtml(startCaseLabel(key)) + '</span><input type="color" data-color-key="' + key + '" value="' + Hub.escapeHtml(Hub.getThemeColorValue(key)) + '" />';
         var input = label.querySelector("input");
-        var cssVar = Hub.CSS_VAR_MAP[key];
-        if (cssVar) {
-          var current = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-          if (current && current.startsWith("#")) input.value = current;
-        }
-        input.addEventListener("input", function () { if (cssVar) document.documentElement.style.setProperty(cssVar, input.value); });
+        input.addEventListener("input", function () {
+          if (Hub.HINT_KEYS.indexOf(key) === -1) {
+            applyColorPreview(updateHintInputs());
+          } else {
+            applyColorPreview();
+          }
+        });
         cardGrid.appendChild(label);
       });
       card.appendChild(cardGrid);
       grid.appendChild(card);
     });
+
+    /* Re-derive and sync hint color inputs whenever a base color changes. */
+    function updateHintInputs() {
+      var currentColors = collectCurrentColors();
+      var derived = Hub.deriveHintColors(currentColors);
+      Hub.HINT_KEYS.forEach(function (hintKey) {
+        var hintInput = grid.querySelector('[data-color-key="' + hintKey + '"]');
+        if (!hintInput) return;
+        hintInput.value = derived[hintKey];
+      });
+      return Object.assign(currentColors, derived);
+    }
+
     colorSection.appendChild(grid);
 
     /* Border / radius controls */
-    var styleSection = createThemeSection(sidebar, "Shape & Borders", "Control the feel of cards and inputs without touching the palette.");
+    var styleSection = createThemeSection(body,"Shape & Borders", "Control the feel of cards and inputs without touching the palette.");
 
     var styleGrid = document.createElement("div");
     styleGrid.className = "style-controls";
@@ -252,7 +291,7 @@ Hub.customize = (function () {
     styleSection.appendChild(styleGrid);
 
     /* Background image */
-    var bgSection = createThemeSection(sidebar, "Background", "Use an image, video, or upload to shape the atmosphere behind the widgets.");
+    var bgSection = createThemeSection(body,"Background", "Use an image, video, or upload to shape the atmosphere behind the widgets.");
 
     var bgWrap = document.createElement("div");
     bgWrap.className = "bg-image-controls";
@@ -566,7 +605,7 @@ Hub.customize = (function () {
     bgSection.appendChild(bgWrap);
 
     /* Zen mode */
-    var zenSection = createThemeSection(sidebar, "Zen Mode", "Choose how quickly the interface fades away when you go idle.");
+    var zenSection = createThemeSection(body,"Zen Mode", "Choose how quickly the interface fades away when you go idle.");
 
     var zenSettings = { idleTimeoutMs: Hub.zen.getIdleTimeoutMs() };
     var zenRow = document.createElement("label");
@@ -591,7 +630,7 @@ Hub.customize = (function () {
     zenSection.appendChild(zenRow);
 
     /* Custom CSS */
-    var cssSection = createThemeSection(sidebar, "Custom CSS", "For final polish when the built-in controls are not enough.");
+    var cssSection = createThemeSection(body,"Custom CSS", "For final polish when the built-in controls are not enough.");
 
     var cssTextarea = document.createElement("textarea");
     cssTextarea.className = "custom-css-input";
@@ -601,20 +640,11 @@ Hub.customize = (function () {
     cssTextarea.addEventListener("input", function () { Hub.applyCustomCss(cssTextarea.value); });
     cssSection.appendChild(cssTextarea);
 
-    /* Actions */
-    var actionsSection = createThemeSection(sidebar, "Actions", "Save your changes, reset everything, or move settings between machines.");
-    var actions = document.createElement("div");
-    actions.className = "theme-actions";
-    actions.innerHTML =
-      '<button class="toolbar-button toolbar-button-ghost" data-theme-reset type="button">Reset all</button>' +
-      '<button class="toolbar-button toolbar-button-ghost" data-theme-export type="button">Export</button>' +
-      '<button class="toolbar-button toolbar-button-ghost" data-theme-import type="button">Import</button>' +
-      '<button class="toolbar-button" data-theme-save type="button">Save</button>';
-
-    actions.querySelector("[data-theme-save]").addEventListener("click", async function () {
-      var colors = {};
-      grid.querySelectorAll("[data-color-key]").forEach(function (inp) { colors[inp.dataset.colorKey] = inp.value; });
-      var isGlobal = sidebar.querySelector('input[name="theme-scope"]:checked').value === "global";
+    /* ── doSave ── */
+    async function doSave() {
+      var colors = collectCurrentColors();
+      applyColorPreview(colors);
+      var isGlobal = body.querySelector('input[name="theme-scope"]:checked').value === "global";
       await Hub.saveThemeOverride(store, profileName, colors, isGlobal);
       await store.set(Hub.STORAGE_STYLE_KEY, currentStyles);
       await store.set(Hub.STORAGE_CUSTOM_CSS_KEY, cssTextarea.value || "");
@@ -629,9 +659,22 @@ Hub.customize = (function () {
       await Hub.saveBgImage(store, profileName, bgToSave);
       await Hub.zen.setIdleTimeoutMs(zenSettings.idleTimeoutMs, true);
       closeThemeSidebar();
-    });
+    }
 
-    actions.querySelector("[data-theme-export]").addEventListener("click", async function () {
+    /* ── Fixed footer (always visible) ── */
+    var footer = document.createElement("div");
+    footer.className = "theme-sidebar-footer";
+    footer.innerHTML =
+      '<div class="theme-footer-secondary">' +
+        '<button class="toolbar-button toolbar-button-ghost" data-theme-export type="button">Export</button>' +
+        '<button class="toolbar-button toolbar-button-ghost" data-theme-import type="button">Import</button>' +
+        '<button class="toolbar-button toolbar-button-ghost" data-theme-reset type="button">Reset <kbd>R</kbd></button>' +
+      '</div>' +
+      '<button class="toolbar-button theme-footer-save" data-theme-save type="button">Save <kbd>Cmd/Ctrl+S</kbd></button>';
+
+    footer.querySelector("[data-theme-save]").addEventListener("click", doSave);
+
+    footer.querySelector("[data-theme-export]").addEventListener("click", async function () {
       try {
         var all = await store.getAll();
         var data = {};
@@ -673,9 +716,9 @@ Hub.customize = (function () {
     importFileInput.type = "file";
     importFileInput.accept = ".json";
     importFileInput.style.display = "none";
-    actions.appendChild(importFileInput);
+    footer.appendChild(importFileInput);
 
-    actions.querySelector("[data-theme-import]").addEventListener("click", function () {
+    footer.querySelector("[data-theme-import]").addEventListener("click", function () {
       importFileInput.click();
     });
 
@@ -714,7 +757,7 @@ Hub.customize = (function () {
       importFileInput.value = "";
     });
 
-    actions.querySelector("[data-theme-reset]").addEventListener("click", async function () {
+    footer.querySelector("[data-theme-reset]").addEventListener("click", async function () {
       Hub.applyColorScheme(Hub.DEFAULT_COLORS);
       Hub.applyStyleOverrides(Hub.DEFAULT_STYLE);
       Hub.applyCustomCss("");
@@ -741,50 +784,19 @@ Hub.customize = (function () {
       bgSurfaceDisplay.textContent = Math.round(currentBg.surfaceOpacity * 100) + "%";
       bgFitSelect.value = currentBg.fit;
     });
-    actionsSection.appendChild(actions);
+
+    sidebar.appendChild(body);
+    sidebar.appendChild(footer);
 
     sidebar.classList.add("is-open");
-    themeOverlay.classList.add("is-open");
+    document.body.classList.add("theme-sidebar-open");
 
-    /* Keyboard navigation for theme sidebar */
-    function getSidebarFocusable() {
-      return Array.from(sidebar.querySelectorAll(
-        'input:not([type="file"]), select, textarea, button'
-      )).filter(function (el) { return el.offsetParent !== null && el.style.display !== "none"; });
-    }
-
-    function onSidebarKey(e) {
-      if (!sidebar.classList.contains("is-open")) return;
-
-      if (e.key === "Escape") {
-        /* If preset dropdown open, close it first */
-        if (dropdown.classList.contains("is-open")) {
-          e.preventDefault(); e.stopPropagation();
-          dropdown.classList.remove("is-open");
-          return;
-        }
-        return; /* Let the existing escape handler close the sidebar */
-      }
-
-      /* Tab trap within sidebar */
-      if (e.key === "Tab") {
-        var focusable = getSidebarFocusable();
-        if (!focusable.length) return;
-        var first = focusable[0];
-        var last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    }
-
-    sidebar.addEventListener("keydown", onSidebarKey);
-
-    requestAnimationFrame(function () { closeButton.focus(); });
+    /* Vim-style keyboard navigation */
+    _themeKeyboard = new ThemeSidebarKeyboard(sidebar, body, {
+      onSave: doSave,
+      onClose: closeThemeSidebar
+    });
+    _themeKeyboard.attach();
   }
 
   return {

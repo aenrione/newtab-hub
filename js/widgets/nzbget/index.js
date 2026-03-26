@@ -127,7 +127,6 @@ Hub.registry.register("nzbget", {
       "<span>Widget title</span>" +
       '<input type="text" value="' + Hub.escapeHtml(config.title || "NZBGet") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);

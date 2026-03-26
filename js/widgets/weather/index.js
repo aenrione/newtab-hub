@@ -229,7 +229,6 @@ Hub.registry.register("weather", {
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Weather") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
@@ -239,17 +238,18 @@ Hub.registry.register("weather", {
     locLabel.querySelector("input").addEventListener("input", function (e) { config.location = e.target.value; onChange(config); });
     container.appendChild(locLabel);
 
-    var unitsLabel = document.createElement("label");
-    unitsLabel.className = "editor-field";
-    var unitsVal = config.units || "celsius";
-    unitsLabel.innerHTML =
-      '<span>Units</span>' +
-      '<select>' +
-        '<option value="celsius"' + (unitsVal === "celsius" ? " selected" : "") + '>Celsius (\u00B0C)</option>' +
-        '<option value="fahrenheit"' + (unitsVal === "fahrenheit" ? " selected" : "") + '>Fahrenheit (\u00B0F)</option>' +
-      '</select>';
-    unitsLabel.querySelector("select").addEventListener("change", function (e) { config.units = e.target.value; onChange(config); });
-    container.appendChild(unitsLabel);
+    container.appendChild(Hub.createCustomSelect("Units", [
+      { value: "celsius", label: "Celsius (\u00B0C)" },
+      { value: "fahrenheit", label: "Fahrenheit (\u00B0F)" }
+    ], config.units || "celsius", function (v) { config.units = v; onChange(config); }));
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      location: { type: "string" },
+      units: { type: "string", enum: ["celsius", "fahrenheit"] }
+    }
   },
 
   defaultConfig: function () {

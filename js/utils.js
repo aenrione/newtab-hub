@@ -116,3 +116,176 @@ Hub.fetchWithTimeout = async function (url, options, timeoutMs) {
     clearTimeout(timer);
   }
 };
+
+/* ── Custom select component ──────────────────────────────────────────────────
+   Replaces native <select> in widget editors with a keyboard-navigable dropdown.
+   EditorKeyboard picks up the trigger button (data-custom-select) as a flat field.
+
+   Usage:
+     var field = Hub.createCustomSelect("Label", options, currentValue, onChange);
+     container.appendChild(field);
+
+   options:  [{value, label}, ...]
+   onChange: function(newValue)
+   Returns:  div.editor-field
+── */
+Hub.createCustomSelect = function (labelText, options, currentValue, onChange) {
+  var current = currentValue;
+
+  /* Wrapper styled as a regular editor field row */
+  var wrap = document.createElement("div");
+  wrap.className = "editor-field";
+
+  var labelEl = document.createElement("span");
+  labelEl.textContent = labelText;
+  wrap.appendChild(labelEl);
+
+  /* Inner container so the dropdown is positioned relative to the button */
+  var inner = document.createElement("div");
+  inner.className = "custom-select-wrap";
+  wrap.appendChild(inner);
+
+  /* Trigger button — included in EditorKeyboard flatFields via data-custom-select */
+  var btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "custom-select-btn";
+  btn.dataset.customSelect = "";
+
+  var chevron = document.createElement("span");
+  chevron.className = "custom-select-chevron";
+  chevron.innerHTML = Hub.icons ? Hub.icons.chevronDown : "▾";
+
+  var dropdown = document.createElement("div");
+  dropdown.className = "custom-select-dropdown";
+
+  var focusedIdx = -1;
+  var isOpen = false;
+
+  function getLabel(val) {
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].value === val) return options[i].label;
+    }
+    return val;
+  }
+
+  function updateBtn() {
+    btn.textContent = getLabel(current);
+    btn.appendChild(chevron);
+    btn.classList.toggle("is-open", isOpen);
+  }
+
+  function getOptionEls() {
+    return Array.from(dropdown.querySelectorAll(".custom-select-option"));
+  }
+
+  function highlightOption(idx) {
+    var els = getOptionEls();
+    els.forEach(function (el) { el.classList.remove("is-focused"); });
+    focusedIdx = Math.max(0, Math.min(els.length - 1, idx));
+    if (els[focusedIdx]) els[focusedIdx].scrollIntoView({ block: "nearest" });
+    if (els[focusedIdx]) els[focusedIdx].classList.add("is-focused");
+  }
+
+  function renderOptions() {
+    dropdown.replaceChildren();
+    focusedIdx = -1;
+    options.forEach(function (opt, i) {
+      var el = document.createElement("button");
+      el.type = "button";
+      el.className = "custom-select-option" + (opt.value === current ? " is-selected" : "");
+      el.textContent = opt.label;
+      if (opt.value === current) focusedIdx = i;
+      el.addEventListener("mousedown", function (e) {
+        e.preventDefault(); /* keep focus on btn */
+      });
+      el.addEventListener("click", function () {
+        current = opt.value;
+        onChange(current);
+        close();
+        /* Tell EditorKeyboard a selection was made — return to normal mode */
+        btn.dispatchEvent(new CustomEvent("custom-select-picked", { bubbles: true }));
+      });
+      dropdown.appendChild(el);
+    });
+  }
+
+  function open() {
+    isOpen = true;
+    renderOptions();
+    dropdown.classList.add("is-open");
+    updateBtn();
+    /* Scroll focused option into view */
+    var els = getOptionEls();
+    if (focusedIdx >= 0 && els[focusedIdx]) els[focusedIdx].scrollIntoView({ block: "nearest" });
+    if (els[focusedIdx]) els[focusedIdx].classList.add("is-focused");
+  }
+
+  function close() {
+    isOpen = false;
+    dropdown.classList.remove("is-open");
+    updateBtn();
+    btn.focus();
+  }
+
+  /* ── Button keyboard handling ── */
+  btn.addEventListener("keydown", function (e) {
+    /* When dropdown is closed: open on Enter, Space, or arrow keys */
+    if (!isOpen) {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault(); e.stopPropagation();
+        open();
+        if (e.key === "ArrowDown" || e.key === "j") highlightOption((focusedIdx >= 0 ? focusedIdx : -1) + 1);
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault(); e.stopPropagation();
+        open();
+        if (focusedIdx > 0) highlightOption(focusedIdx - 1);
+        return;
+      }
+      return; /* all other keys (including Escape) propagate normally */
+    }
+
+    /* When dropdown is open: navigate and confirm */
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault(); e.stopPropagation();
+      highlightOption(focusedIdx + 1);
+      return;
+    }
+    if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault(); e.stopPropagation();
+      highlightOption(focusedIdx - 1);
+      return;
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault(); e.stopPropagation();
+      var els = getOptionEls();
+      if (focusedIdx >= 0 && els[focusedIdx]) els[focusedIdx].click();
+      return;
+    }
+    if (e.key === "Escape") {
+      /* Close dropdown only — do NOT let onEditEscape or EditorKeyboard see this */
+      e.preventDefault(); e.stopPropagation();
+      close();
+      return;
+    }
+  });
+
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (isOpen) close(); else open();
+  });
+
+  /* Close when clicking outside */
+  var onDocClick = function (e) {
+    if (!inner.contains(e.target) && isOpen) close();
+    if (!document.body.contains(inner)) document.removeEventListener("click", onDocClick);
+  };
+  document.addEventListener("click", onDocClick);
+
+  updateBtn();
+  inner.appendChild(btn);
+  inner.appendChild(dropdown);
+
+  return wrap;
+};

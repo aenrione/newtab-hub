@@ -112,7 +112,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
 
   var listWrap = document.createElement("div");
   listWrap.className = "editor-items";
-  listWrap.dataset.navList = "";
   container.appendChild(listWrap);
 
   if (!items.length) {
@@ -134,8 +133,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
   items.forEach(function (item, index) {
     var card = document.createElement("div");
     card.className = "editor-card";
-    card.dataset.navItem = "";
-    card.tabIndex = -1;
     card.draggable = true;
     card.dataset.index = index;
 
@@ -201,7 +198,6 @@ function buildListEditor(container, config, listKey, onChange, fields, emptyItem
     });
 
     card.querySelectorAll("[data-field]").forEach(function (inp) {
-      inp.dataset.navField = "";
       inp.addEventListener("input", function (e) {
         item[e.target.dataset.field] = e.target.value;
         onChange(config);

@@ -184,7 +184,6 @@ Hub.registry.register("grafana", {
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Grafana") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
@@ -196,26 +195,31 @@ Hub.registry.register("grafana", {
     container.appendChild(urlLabel);
 
     /* Mode selector */
-    var modeLabel = document.createElement("label");
-    modeLabel.className = "editor-field";
-    var modeVal = config.mode || "alerts";
-    modeLabel.innerHTML =
-      '<span>Mode</span>' +
-      '<select>' +
-        '<option value="alerts"' + (modeVal === "alerts" ? " selected" : "") + '>Alerts</option>' +
-        '<option value="metrics"' + (modeVal === "metrics" ? " selected" : "") + '>Metrics</option>' +
-        '<option value="panels"' + (modeVal === "panels" ? " selected" : "") + '>Panels (iframes)</option>' +
-      '</select>';
     var modeSection = document.createElement("div");
     modeSection.className = "grafana-mode-section";
-    modeLabel.querySelector("select").addEventListener("change", function (e) {
-      config.mode = e.target.value;
+    container.appendChild(Hub.createCustomSelect("Mode", [
+      { value: "alerts", label: "Alerts" },
+      { value: "metrics", label: "Metrics" },
+      { value: "panels", label: "Panels (iframes)" }
+    ], config.mode || "alerts", function (v) {
+      config.mode = v;
       onChange(config);
       buildModeSection(modeSection, config, onChange, navOptions);
-    });
-    container.appendChild(modeLabel);
+    }));
     container.appendChild(modeSection);
     buildModeSection(modeSection, config, onChange, navOptions);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      instanceUrl: { type: "string" },
+      mode: { type: "string", enum: ["alerts", "metrics", "panels"] },
+      alertLimit: { type: "number", min: 1, max: 50 },
+      showSuppressed: { type: "boolean" },
+      theme: { type: "string", enum: ["dark", "light"] },
+      orgId: { type: "number", min: 1 }
+    }
   },
 
   defaultConfig: function () {
@@ -500,17 +504,10 @@ function buildModeSection(section, config, onChange, navOptions) {
     panelHint.textContent = "Find the Dashboard UID in the URL (e.g. /d/AbCdEfGh/...) and the Panel ID via panel menu \u2192 Edit \u2192 URL ?editPanel=N or panel \u2192 Share \u2192 Embed.";
     section.appendChild(panelHint);
 
-    var themeLabel = document.createElement("label");
-    themeLabel.className = "editor-field";
-    var themeVal = config.theme || "dark";
-    themeLabel.innerHTML =
-      '<span>Theme</span>' +
-      '<select>' +
-        '<option value="dark"' + (themeVal === "dark" ? " selected" : "") + '>Dark</option>' +
-        '<option value="light"' + (themeVal === "light" ? " selected" : "") + '>Light</option>' +
-      '</select>';
-    themeLabel.querySelector("select").addEventListener("change", function (e) { config.theme = e.target.value; onChange(config); });
-    section.appendChild(themeLabel);
+    section.appendChild(Hub.createCustomSelect("Theme", [
+      { value: "dark", label: "Dark" },
+      { value: "light", label: "Light" }
+    ], config.theme || "dark", function (v) { config.theme = v; onChange(config); }));
 
     var orgLabel = document.createElement("label");
     orgLabel.className = "editor-field";

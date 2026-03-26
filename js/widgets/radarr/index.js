@@ -112,7 +112,6 @@ Hub.registry.register("radarr", {
       "<span>Widget title</span>" +
       '<input type="text" value="' + Hub.escapeHtml(config.title || "Radarr") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);

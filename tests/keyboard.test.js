@@ -28,7 +28,8 @@ describe("keyboard search focus key", function () {
       help: { show: jest.fn() },
       zen: { toggle: jest.fn(), updateButtonIcon: jest.fn() },
       grid: { isEditing: function () { return false; } },
-      editMode: null
+      editMode: null,
+      syncStatus: { pull: jest.fn(), confirmPush: jest.fn() }
     };
 
     loadScript("js/keyboard.js");
@@ -66,5 +67,18 @@ describe("keyboard search focus key", function () {
 
     expect(global.Hub.focusSearch).toHaveBeenNthCalledWith(1, "/");
     expect(global.Hub.focusSearch).toHaveBeenNthCalledWith(2, ".");
+  });
+
+  test("uses y and Shift+Y for pull and push", function () {
+    const pullEvent = { key: "y", preventDefault: jest.fn(), metaKey: false, ctrlKey: false, altKey: false, shiftKey: false };
+    const pushEvent = { key: "Y", preventDefault: jest.fn(), metaKey: false, ctrlKey: false, altKey: false, shiftKey: true };
+
+    keydownHandler(pullEvent);
+    keydownHandler(pushEvent);
+
+    expect(global.Hub.syncStatus.pull).toHaveBeenCalledTimes(1);
+    expect(global.Hub.syncStatus.confirmPush).toHaveBeenCalledTimes(1);
+    expect(pullEvent.preventDefault).toHaveBeenCalled();
+    expect(pushEvent.preventDefault).toHaveBeenCalled();
   });
 });

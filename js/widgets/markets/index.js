@@ -188,24 +188,15 @@ Hub.registry.register("markets", {
     titleLabel.className = "editor-field";
     titleLabel.innerHTML = '<span>Widget title</span><input type="text" value="' + Hub.escapeHtml(config.title || "Markets") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
     // Sort-by
-    var sortLabel = document.createElement("label");
-    sortLabel.className = "editor-field";
-    sortLabel.innerHTML =
-      '<span>Sort by</span>' +
-      '<select>' +
-        '<option value="">Order defined</option>' +
-        '<option value="change">% Change (desc)</option>' +
-        '<option value="absolute-change">|% Change| (desc)</option>' +
-      '</select>';
-    var sortSel = sortLabel.querySelector("select");
-    sortSel.value = config["sort-by"] || "";
-    sortSel.addEventListener("change", function (e) { config["sort-by"] = e.target.value; onChange(config); });
-    container.appendChild(sortLabel);
+    container.appendChild(Hub.createCustomSelect("Sort by", [
+      { value: "", label: "Order defined" },
+      { value: "change", label: "% Change (desc)" },
+      { value: "absolute-change", label: "|% Change| (desc)" }
+    ], config["sort-by"] || "", function (v) { config["sort-by"] = v; onChange(config); }));
 
     // Chart link template
     var chartTplLabel = document.createElement("label");
@@ -236,6 +227,15 @@ Hub.registry.register("markets", {
       { key: "chart-link",  label: "Chart link",  placeholder: "overrides template" },
       { key: "symbol-link", label: "Symbol link", placeholder: "overrides template" }
     ], function () { return { symbol: "", name: "", "chart-link": "", "symbol-link": "" }; }, navOptions);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      "sort-by": { type: "string", enum: ["", "change", "absolute-change"] },
+      "chart-link-template": { type: "string" },
+      "symbol-link-template": { type: "string" }
+    }
   },
 
   defaultConfig: function () {

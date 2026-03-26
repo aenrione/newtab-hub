@@ -113,18 +113,11 @@ Hub.registry.register("dns-stats", {
     titleLabel.querySelector("input").addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
-    var serviceLabel = document.createElement("label");
-    serviceLabel.className = "editor-field";
-    var svc = config.service || "pihole";
-    serviceLabel.innerHTML =
-      '<span>Service</span>' +
-      '<select>' +
-        '<option value="pihole6"' + (svc === "pihole6" ? " selected" : "") + '>Pi-hole (v6)</option>' +
-        '<option value="pihole"' + (svc === "pihole" ? " selected" : "") + '>Pi-hole (v5)</option>' +
-        '<option value="adguard"' + (svc === "adguard" ? " selected" : "") + '>AdGuard Home</option>' +
-      '</select>';
-    serviceLabel.querySelector("select").addEventListener("change", function (e) { config.service = e.target.value; onChange(config); });
-    container.appendChild(serviceLabel);
+    container.appendChild(Hub.createCustomSelect("Service", [
+      { value: "pihole6", label: "Pi-hole (v6)" },
+      { value: "pihole", label: "Pi-hole (v5)" },
+      { value: "adguard", label: "AdGuard Home" }
+    ], config.service || "pihole6", function (v) { config.service = v; onChange(config); }));
 
     var urlLabel = document.createElement("label");
     urlLabel.className = "editor-field";
@@ -136,6 +129,14 @@ Hub.registry.register("dns-stats", {
     hint.className = "editor-hint";
     hint.textContent = "Pi-hole v6: enter your web password. Pi-hole v5: enter API token (Settings \u2192 API). AdGuard Home: enter username:password.";
     container.appendChild(hint);
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      service: { type: "string", enum: ["pihole6", "pihole", "adguard"] },
+      url: { type: "string" }
+    }
   },
 
   defaultConfig: function () {

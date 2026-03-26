@@ -15,7 +15,7 @@ Hub.injectStyles("widget-search", `
     position: relative;
     transition: box-shadow 120ms;
   }
-  .search-wrap:focus-within { box-shadow: 0 0 0 2px rgba(121, 174, 232, 0.15); }
+  .search-wrap:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 15%, transparent); }
   .search-icon {
     display: inline-flex;
     align-items: center;
@@ -23,7 +23,7 @@ Hub.injectStyles("widget-search", `
     width: 22px;
     height: 22px;
     border-radius: var(--radius-sm);
-    background: rgba(121, 174, 232, 0.14);
+    background: color-mix(in srgb, var(--accent-2) 14%, transparent);
     color: var(--accent-2);
     font-size: 11px;
     font-weight: 700;

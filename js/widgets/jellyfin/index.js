@@ -129,7 +129,6 @@ Hub.registry.register("jellyfin", {
       "<span>Widget title</span>" +
       '<input type="text" value="' + Hub.escapeHtml(config.title || "Jellyfin") + '" />';
     var titleInput = titleLabel.querySelector("input");
-    titleInput.dataset.navHeaderField = "";
     titleInput.addEventListener("input", function (e) {
       config.title = e.target.value;
       onChange(config);

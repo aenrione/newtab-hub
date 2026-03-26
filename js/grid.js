@@ -11,42 +11,74 @@ Hub.grid = (function () {
   var onSaveCallback = null;
   var editBar = null;
   var editClone = null; /* deep clone of widgets during edit mode */
+  var editClipboard = null; /* copied widget data for Cmd+C / Cmd+V */
+  var onAddedFn = null; /* stored onAdded callback for paste/duplicate */
+  var configSidebar = null;        /* singleton left sidebar for widget config */
+  var configSidebarWidgetId = null; /* widgetId currently rendered in sidebar */
+  var editOnConfigSave = null;      /* onConfigSave callback stored during edit mode */
 
-  /* Keys that are actions in edit mode and must not be used as chord shortcuts */
-  var EDIT_ACTION_KEYS = { g: 1, x: 1, e: 1 };
+  /* Keys reserved by edit mode or other global actions while editing. */
+  var EDIT_ACTION_KEYS = { c: 1, x: 1, e: 1, r: 1 };
+  var EDIT_RESERVED_KEYS = { a: 1, c: 1, e: 1, h: 1, j: 1, k: 1, l: 1, p: 1, r: 1, t: 1, x: 1, z: 1 };
+  var EDIT_CHORD_KEYS = "fgswvbnmioqudy1234567890".split("");
 
-  /* Edit-mode chord: derived from keyboard.js widgetKeyMap, minus edit-mode action keys.
-     Widgets excluded from normal-mode chords (e.g. pinned-links) get a fresh key assigned. */
+  function getEditWidgetTitle(el) {
+    var h = el.querySelector(".widget-header h1, .widget-header h2, .widget-header h3, h2, h3, summary h3");
+    if (h && h.textContent) return h.textContent.trim();
+    return String(el.dataset.widgetType || "").replace(/-/g, " ");
+  }
+
+  function collectEditTitleKeys(title) {
+    var seen = {};
+    return String(title || "").toLowerCase().replace(/[^a-z0-9]/g, "").split("").filter(function (key) {
+      if (!key || seen[key] || EDIT_RESERVED_KEYS[key] || EDIT_CHORD_KEYS.indexOf(key) === -1) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  /* Edit-mode chord: keep a widget's normal key when safe, otherwise assign from a
+     dedicated edit-mode pool so every editable widget can still be focused. */
   function buildEditChordMap(gridEl) {
-    var keyMap   = Hub.keyboard.getWidgetKeyMap();
-    var ergoKeys = Hub.keyboard.ERGO_KEYS;
-
-    /* Collect already-used keys so we don't double-assign */
+    var keyMap = Hub.keyboard.getWidgetKeyMap();
+    var widgets = getEditableWidgets(gridEl);
     var used = {};
-    var widgetFirstKey = new Map();
+    var assignedByWidget = new Map();
 
     Object.keys(keyMap).forEach(function (key) {
-      used[key] = true;
-      if (EDIT_ACTION_KEYS[key]) return;
       var widgetEl = keyMap[key].widgetEl;
-      if (!widgetFirstKey.has(widgetEl)) widgetFirstKey.set(widgetEl, key);
+      if (!widgetEl || assignedByWidget.has(widgetEl) || EDIT_RESERVED_KEYS[key] || EDIT_CHORD_KEYS.indexOf(key) === -1) return;
+      used[key] = true;
+      assignedByWidget.set(widgetEl, key);
     });
 
-    /* Assign keys to editable widgets not covered by widgetKeyMap (e.g. pinned-links) */
-    getEditableWidgets(gridEl).forEach(function (el) {
-      if (widgetFirstKey.has(el)) return;
-      for (var i = 0; i < ergoKeys.length; i++) {
-        var k = ergoKeys[i];
-        if (!Hub.keyboard.isReservedKey(k) && !EDIT_ACTION_KEYS[k] && !used[k]) {
-          used[k] = true;
-          widgetFirstKey.set(el, k);
+    widgets.forEach(function (el) {
+      if (assignedByWidget.has(el)) return;
+
+      var preferredKeys = collectEditTitleKeys(getEditWidgetTitle(el));
+      for (var i = 0; i < preferredKeys.length; i++) {
+        var preferredKey = preferredKeys[i];
+        if (!used[preferredKey]) {
+          used[preferredKey] = true;
+          assignedByWidget.set(el, preferredKey);
+          break;
+        }
+      }
+
+      if (assignedByWidget.has(el)) return;
+
+      for (var j = 0; j < EDIT_CHORD_KEYS.length; j++) {
+        var fallbackKey = EDIT_CHORD_KEYS[j];
+        if (!used[fallbackKey]) {
+          used[fallbackKey] = true;
+          assignedByWidget.set(el, fallbackKey);
           break;
         }
       }
     });
 
-    getEditableWidgets(gridEl).forEach(function (el) {
-      var key = widgetFirstKey.get(el);
+    widgets.forEach(function (el) {
+      var key = assignedByWidget.get(el);
       if (key) el.dataset.editChordKey = key;
       else delete el.dataset.editChordKey;
     });
@@ -315,7 +347,17 @@ Hub.grid = (function () {
     editBar = document.createElement("div");
     editBar.className = "grid-edit-bar";
     editBar.innerHTML =
-      '<span class="grid-edit-label">Editing layout <kbd class="edit-bar-hint">Tab</kbd> cycle <kbd class="edit-bar-hint">\u2190\u2191\u2192\u2193</kbd> move <kbd class="edit-bar-hint">Shift+\u2190\u2191\u2192\u2193</kbd> resize</span>' +
+      '<span class="grid-edit-label">Editing layout' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">Tab</kbd> cycle</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">\u2190\u2191\u2192\u2193</kbd> move</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">Shift+\u2190\u2191\u2192\u2193</kbd> resize</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">Enter/C</kbd> config</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">Space</kbd> drag</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">Backspace/X</kbd> delete</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">R</kbd> raw</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">\u2318C</kbd> copy</span>' +
+        '<span class="edit-hint-group"><kbd class="edit-bar-hint">\u2318V</kbd> paste</span>' +
+      '</span>' +
       '<div class="grid-edit-actions">' +
         '<button class="toolbar-button toolbar-button-ghost edit-bar-add-btn grid-edit-add" type="button" title="A">' +
           Hub.icons.plus + ' Add widget <kbd>A</kbd></button>' +
@@ -352,36 +394,153 @@ Hub.grid = (function () {
     if (el) el.remove();
   }
 
-  function openConfigModal(widgetId, onSave) {
-    var w = editClone.find(function (ww) { return ww.id === widgetId; });
+  async function pasteWidget() {
+    if (!editClipboard || !onAddedFn) return;
+    var slot = findFirstAvailableSlot(editClone, editClipboard.width || 4, editClipboard.height || 1);
+    var newWidget = {
+      id: Hub.uid(),
+      type: editClipboard.type,
+      col: slot.col,
+      row: slot.row,
+      width: editClipboard.width,
+      height: editClipboard.height,
+      minWidth: editClipboard.minWidth,
+      minHeight: editClipboard.minHeight,
+      config: JSON.parse(JSON.stringify(editClipboard.config || {}))
+    };
+    if (editClipboard.cardColor) newWidget.cardColor = Object.assign({}, editClipboard.cardColor);
+    editClone.push(newWidget);
+
+    /* Copy per-widget storage from the source widget to the new widget */
+    var srcId = editClipboard._srcId;
+    if (srcId) {
+      var store = Hub.storageApi();
+
+      /* Copy credentials (API keys, tokens) */
+      var creds = await Hub.credentials.load(srcId);
+      if (creds && Object.keys(creds).length) {
+        await Hub.credentials.save(newWidget.id, creds);
+      }
+
+      /* Copy todo items */
+      var todos = await store.get("new-tab-todos-" + srcId);
+      if (todos) {
+        await store.set("new-tab-todos-" + newWidget.id, todos);
+      }
+    }
+
+    onAddedFn(newWidget, { openConfig: false });
+  }
+
+  var rawJsonEditor = Hub.rawJsonEditor;
+  var formatConfigJSON = rawJsonEditor.formatConfigJSON;
+  var parseConfigJSON = rawJsonEditor.parseConfigJSON;
+  var rawFindInnerWordRange = rawJsonEditor.rawFindInnerWordRange;
+  var rawMoveWordBackward = rawJsonEditor.rawMoveWordBackward;
+  var rawMoveWordForward = rawJsonEditor.rawMoveWordForward;
+  var rawMoveWordEnd = rawJsonEditor.rawMoveWordEnd;
+  var rawFindMatchingBracket = rawJsonEditor.rawFindMatchingBracket;
+  var rawDeleteCurrentLine = rawJsonEditor.rawDeleteCurrentLine;
+  var rawPasteLine = rawJsonEditor.rawPasteLine;
+
+  function openRawConfigEditor(options) {
+    rawJsonEditor.open(options);
+  }
+
+  function ensureConfigSidebar() {
+    if (!configSidebar) {
+      configSidebar = document.createElement("div");
+      configSidebar.className = "config-sidebar";
+      document.body.appendChild(configSidebar);
+    }
+    return configSidebar;
+  }
+
+  function showConfigSidebarEmpty() {
+    var sidebar = ensureConfigSidebar();
+    if (configSidebar._cleanup) { configSidebar._cleanup(); configSidebar._cleanup = null; }
+    configSidebarWidgetId = null;
+    var emptyPanel = document.createElement("div");
+    emptyPanel.className = "config-sidebar-main";
+    var msg = document.createElement("p");
+    msg.className = "config-sidebar-empty-msg";
+    msg.innerHTML = "Navigate to a widget, then press <kbd>C</kbd> to configure it.";
+    emptyPanel.appendChild(msg);
+    sidebar.replaceChildren(emptyPanel);
+    sidebar.classList.add("is-open");
+    document.body.classList.add("config-sidebar-open");
+  }
+
+  function openConfigModal(widgetId, onSave, options) {
+    options = options || {};
+    if (onSave) editOnConfigSave = onSave;
+
+    var w = editClone ? editClone.find(function (ww) { return ww.id === widgetId; }) : null;
     if (!w) return;
     var plugin = Hub.registry.get(w.type);
-    if (!plugin || !plugin.renderEditor) return;
+    if (!plugin) return;
 
-    var overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    var sidebar = ensureConfigSidebar();
+    if (!sidebar.classList.contains("is-open")) return; /* sidebar must be open (edit mode) */
+    if (configSidebarWidgetId === widgetId) {
+      if (options.raw) {
+        var existingRawBtn = sidebar.querySelector("[data-nav-raw]");
+        if (existingRawBtn) existingRawBtn.click();
+      }
+      return;
+    }
+    configSidebarWidgetId = widgetId;
 
+    /* Clean up previous session */
+    if (configSidebar._cleanup) { configSidebar._cleanup(); configSidebar._cleanup = null; }
+
+    /* Main content panel */
     var panel = document.createElement("div");
-    panel.className = "modal-panel";
+    panel.className = "config-sidebar-main";
 
     var header = document.createElement("div");
     header.className = "modal-header";
-    header.innerHTML = '<h2>Configure: ' + Hub.escapeHtml(plugin.label) + '</h2>';
+
+    var title = document.createElement("h2");
+    title.textContent = plugin.label;
+    header.appendChild(title);
+
+    var headerActions = document.createElement("div");
+    headerActions.className = "modal-header-actions";
+
+    var rawBtn = document.createElement("button");
+    rawBtn.className = "toolbar-button toolbar-button-ghost modal-header-button";
+    rawBtn.type = "button";
+    rawBtn.innerHTML = Hub.icons.code + "<span>Raw JSON</span>";
+    rawBtn.dataset.navRaw = "";
+    headerActions.appendChild(rawBtn);
+
     var closeBtn = document.createElement("button");
     closeBtn.className = "modal-close";
     closeBtn.innerHTML = Hub.icons.x;
     closeBtn.type = "button";
-    header.appendChild(closeBtn);
+    headerActions.appendChild(closeBtn);
+    header.appendChild(headerActions);
 
     var body = document.createElement("div");
     body.className = "config-modal-body";
     var editorKeyboard = new EditorKeyboard(panel);
-    plugin.renderEditor(body, w.config || {}, function (newConfig) {
-      w.config = newConfig;
-    }, { onRebuild: function () { editorKeyboard.rescan(); } });
+    var keyboardAttached = false;
+    var renderSeq = 0;
 
-    /* ── Card color section ── */
-    (function () {
+    function attachEditorKeyboard() {
+      if (keyboardAttached) return;
+      editorKeyboard.attach();
+      keyboardAttached = true;
+    }
+
+    function detachEditorKeyboard() {
+      if (!keyboardAttached) return;
+      editorKeyboard.detach();
+      keyboardAttached = false;
+    }
+
+    function appendCardColorSection() {
       var DEFAULT_H = 220, DEFAULT_L = 16, SAT = 30;
 
       function colorStr(h, l) {
@@ -483,102 +642,110 @@ Hub.grid = (function () {
       section.appendChild(resetRow);
 
       body.appendChild(section);
-    })();
+    }
 
-    // Inject credential fields if declared
-    if (plugin.credentialFields && plugin.credentialFields.length > 0) {
-      Hub.credentials.load(widgetId).then(function (savedCreds) {
-        var section = document.createElement("div");
-        section.className = "widget-editor-credentials";
+    function appendCredentialSection(seq) {
+      renderCredentialSection(body, plugin, widgetId,
+        function () { return seq !== renderSeq; },
+        function () { editorKeyboard.rescan(); }
+      );
+    }
 
-        var hdr = document.createElement("div");
-        hdr.className = "widget-editor-credentials-header";
-        hdr.textContent = "Credentials";
-        section.appendChild(hdr);
+    function rebuildBody() {
+      renderSeq++;
+      var seq = renderSeq;
+      body.replaceChildren();
 
-        plugin.credentialFields.forEach(function (field) {
-          var row = document.createElement("div");
-          row.className = "widget-editor-credentials-row";
+      if (plugin.renderEditor) {
+        plugin.renderEditor(body, w.config || {}, function (newConfig) {
+          w.config = newConfig;
+        }, { onRebuild: function () { editorKeyboard.rescan(); } });
+      } else {
+        var empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = "This widget has no visual editor yet. Use Raw JSON.";
+        body.appendChild(empty);
+      }
 
-          var lbl = document.createElement("label");
-          lbl.textContent = field.label;
+      appendCardColorSection();
+      appendCredentialSection(seq);
+    }
 
-          var wrap = document.createElement("div");
-          wrap.className = "widget-editor-credentials-input-wrap";
-
-          var input = document.createElement("input");
-          input.type = "password";
-          input.placeholder = field.placeholder || "";
-          input.autocomplete = "off";
-          if (savedCreds[field.key]) input.value = savedCreds[field.key];
-
-          var toggle = document.createElement("button");
-          toggle.type = "button";
-          toggle.className = "widget-editor-credentials-toggle";
-          toggle.textContent = "Show";
-          toggle.addEventListener("click", function () {
-            var isHidden = input.type === "password";
-            input.type = isHidden ? "text" : "password";
-            toggle.textContent = isHidden ? "Hide" : "Show";
+    function openRawEditor() {
+      detachEditorKeyboard();
+      openRawConfigEditor({
+        title: plugin.label,
+        config: w.config || {},
+        schema: plugin.rawEditorSchema || null,
+        returnFocusEl: rawBtn,
+        onApply: function (nextConfig) {
+          w.config = nextConfig;
+          rebuildBody();
+        },
+        onClose: function () {
+          requestAnimationFrame(function () {
+            attachEditorKeyboard();
           });
-
-          input.addEventListener("blur", function () {
-            if (input.value !== "") {
-              Hub.credentials.save(widgetId, { [field.key]: input.value });
-            }
-          });
-
-          wrap.appendChild(input);
-          wrap.appendChild(toggle);
-          row.appendChild(lbl);
-          row.appendChild(wrap);
-          section.appendChild(row);
-        });
-
-        var clearBtn = document.createElement("button");
-        clearBtn.type = "button";
-        clearBtn.className = "widget-editor-credentials-clear";
-        clearBtn.textContent = "Remove credentials";
-        clearBtn.addEventListener("click", function () {
-          Hub.credentials.clear(widgetId);
-          section.querySelectorAll("input").forEach(function (i) { i.value = ""; });
-        });
-        section.appendChild(clearBtn);
-
-        body.appendChild(section);
+        }
       });
     }
 
-    var actions = document.createElement("div");
-    actions.className = "config-modal-actions";
-    var doneBtn = document.createElement("button");
-    doneBtn.className = "toolbar-button";
-    doneBtn.type = "button";
-    doneBtn.textContent = "Done";
-    doneBtn.dataset.navSave = "";
-    actions.appendChild(doneBtn);
+    rebuildBody();
+    rawBtn.addEventListener("click", openRawEditor);
+
+    var editorHints = document.createElement("div");
+    editorHints.className = "editor-kb-hints";
+    editorHints.innerHTML =
+      "<span><kbd>^D</kbd><kbd>^U</kbd> scroll</span>" +
+      "<span><kbd>z</kbd> fold all</span>";
 
     panel.appendChild(header);
     panel.appendChild(body);
-    panel.appendChild(actions);
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
+    panel.appendChild(editorHints);
 
-    function close() {
-      editorKeyboard.detach();
-      overlay.remove();
-      if (onSave) onSave(widgetId);
+    /* X closes back to empty state (deselects widget) */
+    closeBtn.addEventListener("click", function () {
+      detachEditorKeyboard();
+      configSidebar._cleanup = null;
+      showConfigSidebarEmpty();
+    });
+
+    sidebar.replaceChildren(panel);
+
+    configSidebar._cleanup = function () {
+      detachEditorKeyboard();
+    };
+
+    /* Attach synchronously so focus lands inside the sidebar before this keydown
+       handler returns — prevents 'j' (queued right after 'c') from moving the grid ring */
+    attachEditorKeyboard();
+    if (options.raw) {
+      requestAnimationFrame(function () {
+        openRawEditor();
+      });
     }
-    closeBtn.addEventListener("click", close);
-    doneBtn.addEventListener("click", close);
-    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-
-    requestAnimationFrame(function () { editorKeyboard.attach(); });
   }
 
   function openAddWidgetModal(gridEl, onAdded) {
     var addable = Hub.registry.addable();
     var focusedCardIndex = -1;
+
+    var WIDGET_CATEGORIES = [
+      { name: "Basics",      types: ["clock","todo","calendar","search","pomodoro","weather","markets"] },
+      { name: "Links",       types: ["pinned-links","bookmarks","link-group"] },
+      { name: "News",        types: ["feeds","reddit","hacker-news","lobsters","miniflux","youtube","twitch-channels","twitch-top-games"] },
+      { name: "Media",       types: ["plex","jellyfin","tautulli","immich","overseerr","sonarr","radarr","bazarr","lidarr","readarr","prowlarr","sabnzbd","nzbget","transmission"] },
+      { name: "Self-hosted", types: ["pihole","adguard","proxmox","portainer","nextcloud","netdata","home-assistant","dns-stats","speedtest-tracker","change-detection","grafana","monitor","paperless-ngx","mealie"] },
+      { name: "Developer",   types: ["github-prs","github-releases","repository","custom-api"] },
+      { name: "Layout",      types: ["group","html","iframe"] }
+    ];
+
+    function getCategoryName(type) {
+      for (var i = 0; i < WIDGET_CATEGORIES.length; i++) {
+        if (WIDGET_CATEGORIES[i].types.indexOf(type) !== -1) return WIDGET_CATEGORIES[i].name;
+      }
+      return "Other";
+    }
 
     var overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -607,65 +774,114 @@ Hub.grid = (function () {
 
     /* Card grid */
     var cardGrid = document.createElement("div");
-    cardGrid.className = "add-widget-grid";
+    cardGrid.className = "add-widget-grid is-grouped";
 
-    function selectCard(card) {
-      card.click();
+    function getAllCards() {
+      return Array.from(cardGrid.querySelectorAll(".add-widget-card"));
+    }
+
+    /* Returns all Tab-reachable elements inside the modal in DOM order */
+    function getModalFocusables() {
+      return Array.from(panel.querySelectorAll(
+        'input:not([disabled]), button:not([disabled]), [tabindex="0"]'
+      )).filter(function (el) { return el.offsetParent !== null && el.tabIndex >= 0; });
     }
 
     function focusCard(idx) {
-      var cards = cardGrid.querySelectorAll(".add-widget-card");
+      var cards = getAllCards();
       cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
       if (idx < 0 || idx >= cards.length) { focusedCardIndex = -1; return; }
       focusedCardIndex = idx;
       cards[idx].classList.add("add-widget-card-focus");
-      cards[idx].focus();
+      cards[idx].focus({ preventScroll: true });
+      cards[idx].scrollIntoView({ block: "nearest" });
+    }
+
+    function makeCard(p) {
+      var card = document.createElement("button");
+      card.className = "add-widget-card";
+      card.type = "button";
+      card.tabIndex = 0;
+      var icon = p.icon || "plus";
+      var iconHtml = /^https?:\/\//.test(icon)
+        ? '<img src="' + Hub.escapeHtml(icon) + '" class="add-widget-icon-img" width="14" height="14" alt="">'
+        : (Hub.icons[icon] || Hub.icons.plus);
+      card.innerHTML = iconHtml + "<span>" + Hub.escapeHtml(p.label) + "</span>";
+      card.addEventListener("click", function () {
+        var config = p.defaultConfig();
+        var minSize = Hub.registry.getMinSize ? Hub.registry.getMinSize(p.type, config) : null;
+        var width = Math.max(4, minSize ? minSize.cols : 1);
+        var height = Math.max(1, minSize ? minSize.rows : 1);
+        var slot = findFirstAvailableSlot(editClone, width, height);
+        var newWidget = {
+          id: Hub.uid(),
+          type: p.type,
+          col: slot.col,
+          row: slot.row,
+          width: width,
+          height: height,
+          minWidth: minSize ? minSize.cols : 1,
+          minHeight: minSize ? minSize.rows : 1,
+          config: config
+        };
+        editClone.push(newWidget);
+        close();
+        if (onAdded) onAdded(newWidget, { openConfig: !!p.renderEditor });
+      });
+      return card;
     }
 
     function renderCards(filter) {
       cardGrid.replaceChildren();
       focusedCardIndex = -1;
-      var filt = (filter || "").toLowerCase();
-      addable.forEach(function (p) {
-        if (filt && !p.label.toLowerCase().includes(filt)) return;
-        var card = document.createElement("button");
-        card.className = "add-widget-card";
-        card.type = "button";
-        card.tabIndex = 0;
-        var icon = p.icon || "plus";
-        var iconHtml;
-        if (/^https?:\/\//.test(icon)) {
-          iconHtml = '<img src="' + Hub.escapeHtml(icon) + '" class="add-widget-icon-img" width="14" height="14" alt="">';
-        } else {
-          iconHtml = Hub.icons[icon] || Hub.icons.plus;
-        }
-        card.innerHTML = iconHtml + "<span>" + Hub.escapeHtml(p.label) + "</span>";
-        card.addEventListener("click", function () {
-          var config = p.defaultConfig();
-          var minSize = Hub.registry.getMinSize ? Hub.registry.getMinSize(p.type, config) : null;
-          var width = Math.max(4, minSize ? minSize.cols : 1);
-          var height = Math.max(1, minSize ? minSize.rows : 1);
-          var slot = findFirstAvailableSlot(editClone, width, height);
-          var newWidget = {
-            id: Hub.uid(),
-            type: p.type,
-            col: slot.col,
-            row: slot.row,
-            width: width,
-            height: height,
-            minWidth: minSize ? minSize.cols : 1,
-            minHeight: minSize ? minSize.rows : 1,
-            config: config
-          };
-          editClone.push(newWidget);
-          close();
-          if (onAdded) onAdded(newWidget, { openConfig: !!p.renderEditor });
-        });
-        cardGrid.appendChild(card);
+      var filt = (filter || "").toLowerCase().trim();
+
+      var visible = addable.filter(function (p) {
+        var catName = getCategoryName(p.type);
+        return !filt || p.label.toLowerCase().includes(filt) || catName.toLowerCase().includes(filt);
       });
+
+      var grouped = {};
+      visible.forEach(function (p) {
+        var cat = getCategoryName(p.type);
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(p);
+      });
+      WIDGET_CATEGORIES.forEach(function (cat) {
+        if (!grouped[cat.name]) return;
+        var lbl = document.createElement("div");
+        lbl.className = "add-widget-cat-label";
+        lbl.textContent = cat.name;
+        cardGrid.appendChild(lbl);
+        var grp = document.createElement("div");
+        grp.className = "add-widget-group";
+        grouped[cat.name].forEach(function (p) { grp.appendChild(makeCard(p)); });
+        cardGrid.appendChild(grp);
+      });
+      if (grouped["Other"]) {
+        var otherLbl = document.createElement("div");
+        otherLbl.className = "add-widget-cat-label";
+        otherLbl.textContent = "Other";
+        cardGrid.appendChild(otherLbl);
+        var otherGrp = document.createElement("div");
+        otherGrp.className = "add-widget-group";
+        grouped["Other"].forEach(function (p) { otherGrp.appendChild(makeCard(p)); });
+        cardGrid.appendChild(otherGrp);
+      }
     }
 
+    /* Keep focusedCardIndex in sync when Tab moves focus into a card */
+    cardGrid.addEventListener("focusin", function (e) {
+      var cards = getAllCards();
+      var idx = cards.indexOf(e.target);
+      if (idx === -1) return;
+      cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
+      focusedCardIndex = idx;
+      cards[idx].classList.add("add-widget-card-focus");
+    });
+
     searchInput.addEventListener("input", function () { renderCards(searchInput.value); });
+
     renderCards("");
 
     panel.appendChild(header);
@@ -683,65 +899,77 @@ Hub.grid = (function () {
     closeBtn.addEventListener("click", close);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
 
+    function navigateCards(dir) {
+      var cards = getAllCards();
+      if (!cards.length) return;
+      if (focusedCardIndex < 0) { focusCard(0); return; }
+      var cur = cards[focusedCardIndex];
+      if (!cur) { focusCard(0); return; }
+      var result = Hub.keyboard.spatialMove(cards, cur, dir);
+      if (result) focusCard(cards.indexOf(result));
+    }
+
+    var MODAL_DIR_MAP = {
+      h: "left", l: "right", j: "down", k: "up",
+      ArrowLeft: "left", ArrowRight: "right", ArrowDown: "down", ArrowUp: "up"
+    };
+
     function onModalKey(e) {
-      var cards = cardGrid.querySelectorAll(".add-widget-card");
-      var numCards = cards.length;
-      var cols = 2; /* grid is 2 columns */
+      var key = e.key;
+      var inSearch = document.activeElement === searchInput;
 
-      if (e.key === "Escape") { e.preventDefault(); close(); return; }
-
-      /* Arrow down or Tab from search → move to cards */
-      if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey && document.activeElement === searchInput)) {
-        if (numCards > 0) {
-          e.preventDefault();
-          focusCard(focusedCardIndex < 0 ? 0 : Math.min(focusedCardIndex + cols, numCards - 1));
+      /* Trap Tab within modal — prevent escaping to browser chrome */
+      if (key === "Tab") {
+        var focusables = getModalFocusables();
+        if (!focusables.length) { e.preventDefault(); return; }
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
         }
+        /* Otherwise let the browser handle Tab naturally */
         return;
       }
 
-      /* Arrow up from first row → back to search */
-      if (e.key === "ArrowUp") {
-        if (focusedCardIndex < 0 || focusedCardIndex < cols) {
-          e.preventDefault();
-          cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
-          focusedCardIndex = -1;
-          searchInput.focus();
+      if (key === "Escape") {
+        e.preventDefault();
+        if (inSearch) {
+          /* ESC from search → move focus to cards (normal mode) */
+          var cards = getAllCards();
+          if (cards.length) focusCard(focusedCardIndex >= 0 && focusedCardIndex < cards.length ? focusedCardIndex : 0);
         } else {
-          e.preventDefault();
-          focusCard(focusedCardIndex - cols);
+          close();
         }
         return;
       }
 
-      if (e.key === "ArrowRight") {
-        if (focusedCardIndex >= 0 && focusedCardIndex < numCards - 1) {
-          e.preventDefault();
-          focusCard(focusedCardIndex + 1);
-        }
-        return;
-      }
-
-      if (e.key === "ArrowLeft") {
-        if (focusedCardIndex > 0) {
-          e.preventDefault();
-          focusCard(focusedCardIndex - 1);
-        }
-        return;
-      }
-
-      /* Shift+Tab from cards → back to search */
-      if (e.key === "Tab" && e.shiftKey && focusedCardIndex >= 0) {
+      /* hjkl / arrows — only when a card (not the search input) is focused */
+      if (!inSearch && MODAL_DIR_MAP[key]) {
         e.preventDefault();
-        cards.forEach(function (c) { c.classList.remove("add-widget-card-focus"); });
-        focusedCardIndex = -1;
+        navigateCards(MODAL_DIR_MAP[key]);
+        return;
+      }
+
+      /* ArrowDown from search → jump to first card */
+      if (inSearch && key === "ArrowDown") {
+        e.preventDefault();
+        var cards = getAllCards();
+        if (cards.length) focusCard(focusedCardIndex >= 0 ? focusedCardIndex : 0);
+        return;
+      }
+
+      /* Enter from search with single result → select it */
+      if (inSearch && key === "Enter") {
+        var iCards = getAllCards();
+        if (iCards.length === 1) { e.preventDefault(); iCards[0].click(); }
+        return;
+      }
+
+      /* Printable char while a card is focused → redirect to search */
+      if (!inSearch && key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
         searchInput.focus();
-        return;
-      }
-
-      /* Enter on card → select it */
-      if (e.key === "Enter" && focusedCardIndex >= 0 && focusedCardIndex < numCards) {
-        e.preventDefault();
-        selectCard(cards[focusedCardIndex]);
         return;
       }
     }
@@ -750,6 +978,12 @@ Hub.grid = (function () {
   }
 
   /* ── Edit mode keyboard controls ── */
+
+  function scrollToRevealBottom(el) {
+    var rect = el.getBoundingClientRect();
+    var overflow = rect.bottom + 32 - window.innerHeight;
+    if (overflow > 0) window.scrollBy({ top: overflow, behavior: "instant" });
+  }
 
   var editFocusedWidget = null; /* currently keyboard-focused widget element */
   var editGrabbed = false;      /* whether the focused widget is "grabbed" for move/resize */
@@ -789,6 +1023,13 @@ Hub.grid = (function () {
     if (el) {
       el.classList.add("edit-focus");
       el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      /* Reset sidebar when navigating to a different widget */
+      if (configSidebar && configSidebar.classList.contains("is-open") &&
+          el.dataset.widgetId !== configSidebarWidgetId) {
+        showConfigSidebarEmpty();
+      }
+    } else if (configSidebar && configSidebar.classList.contains("is-open")) {
+      showConfigSidebarEmpty();
     }
   }
 
@@ -804,9 +1045,32 @@ Hub.grid = (function () {
     }, 1800);
   }
 
+  function openFocusedWidgetConfig(widgetEl, options) {
+    if (!widgetEl) return;
+    setEditFocus(widgetEl);
+    if (widgetEl.dataset.widgetId) openConfigModal(widgetEl.dataset.widgetId, null, options);
+  }
+
+  function beginWidgetDrag(widgetEl, e) {
+    if (!widgetEl || !e) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setEditFocus(widgetEl);
+    setEditGrab(false);
+    dragWidget = {
+      el: widgetEl,
+      startX: e.clientX,
+      startY: e.clientY,
+      origCol: parseInt(widgetEl.dataset.gridCol),
+      origRow: parseInt(widgetEl.dataset.gridRow)
+    };
+  }
+
   function handleEditKey(e) {
     var gridEl = document.getElementById("dashboard-grid");
     if (!gridEl || !editing) return false;
+    /* Don't steal keys when focus is inside the config sidebar (EditorKeyboard owns them) */
+    if (configSidebar && configSidebar.contains(document.activeElement)) return false;
 
     /* When grabbed: hjkl/HJKL all map to arrows (move + resize).
        When not grabbed: only HJKL map (shift+resize); lowercase hjkl = focus nav below. */
@@ -843,7 +1107,7 @@ Hub.grid = (function () {
 
     /* Letter chord: jump-focus a widget using the same keys as normal mode.
        Also covers widgets excluded from normal chords (e.g. pinned-links) via editChordKey. */
-    if (/^[a-z]$/.test(key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !EDIT_ACTION_KEYS[key]) {
+    if (/^[a-z0-9]$/.test(key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !EDIT_ACTION_KEYS[key]) {
       /* Try widgetKeyMap first (covers most widgets) */
       var km = Hub.keyboard.getWidgetKeyMap();
       var entry = km[key];
@@ -864,6 +1128,8 @@ Hub.grid = (function () {
     /* hjkl (not grabbed): spatially navigate focus between widgets */
     var HJKL_DIR = { h: "left", j: "down", k: "up", l: "right" };
     if (!editGrabbed && HJKL_DIR[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      /* Config form is open — block grid navigation even if focus wandered outside sidebar */
+      if (configSidebarWidgetId !== null) { e.preventDefault(); return true; }
       e.preventDefault();
       if (!editFocusedWidget) { setEditFocus(widgets[0]); return true; }
       var dir = HJKL_DIR[e.key];
@@ -878,16 +1144,51 @@ Hub.grid = (function () {
       return true;
     }
 
+    /* Cmd+C: copy focused widget to clipboard */
+    if (e.metaKey && key === 'c' && !e.shiftKey && !e.altKey && editFocusedWidget) {
+      e.preventDefault();
+      var srcId = editFocusedWidget.dataset.widgetId;
+      var src = editClone.find(function (ww) { return ww.id === srcId; });
+      if (src) {
+        editClipboard = {
+          _srcId: src.id,
+          type: src.type,
+          width: src.width,
+          height: src.height,
+          minWidth: src.minWidth,
+          minHeight: src.minHeight,
+          config: JSON.parse(JSON.stringify(src.config || {})),
+          cardColor: src.cardColor ? Object.assign({}, src.cardColor) : undefined
+        };
+      }
+      return true;
+    }
+
+    /* Cmd+V: paste copied widget */
+    if (e.metaKey && key === 'v' && !e.shiftKey && !e.altKey && editClipboard) {
+      e.preventDefault();
+      pasteWidget();
+      return true;
+    }
+
     if (!editFocusedWidget) return false;
 
-    /* Enter / Space: toggle grab on focused widget */
-    if ((key === "Enter" || key === " ") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    var w = editFocusedWidget;
+
+    /* Enter / C: open config for focused widget and move focus into sidebar form */
+    if ((key === "Enter" || key === "c") && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      openFocusedWidgetConfig(w);
+      return true;
+    }
+
+    /* Space: toggle grab on focused widget */
+    if (key === " " && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       setEditGrab(!editGrabbed);
       return true;
     }
 
-    var w = editFocusedWidget;
     var col = parseInt(w.dataset.gridCol);
     var row = parseInt(w.dataset.gridRow);
     var width = parseInt(w.dataset.gridWidth);
@@ -935,14 +1236,14 @@ Hub.grid = (function () {
           w.style.gridColumn = col + " / span " + width;
           w.style.gridRow = row + " / span " + height;
         }
+        scrollToRevealBottom(w);
       return true;
     }
 
-    /* G or Enter: open config */
-    if ((key === "g" || key === "Enter") && !e.metaKey && !e.ctrlKey) {
+    /* R: open raw JSON editor for focused widget */
+    if (key === "r" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
-      var gearBtn = w.querySelector(".widget-edit-btn.is-gear");
-      if (gearBtn) gearBtn.click();
+      openFocusedWidgetConfig(w, { raw: true });
       return true;
     }
 
@@ -969,6 +1270,8 @@ Hub.grid = (function () {
   function enterEditMode(gridEl, layout, onSave, onCancel, onAdded, onConfigSave, focusWidgetId) {
     editing = true;
     editFocusedWidget = null;
+    onAddedFn = onAdded;
+    editOnConfigSave = onConfigSave || null;
     gridEl.classList.add("grid-editing");
 
     showEditBar(onSave, onCancel, gridEl, onAdded);
@@ -988,11 +1291,6 @@ Hub.grid = (function () {
       var leftGroup = document.createElement("div");
       leftGroup.className = "widget-edit-left";
 
-      var dragBtn = document.createElement("button");
-      dragBtn.className = "widget-edit-btn is-drag";
-      dragBtn.innerHTML = Hub.icons.gripVertical;
-      dragBtn.title = "Drag to move";
-
       var rightGroup = document.createElement("div");
       rightGroup.className = "widget-edit-right";
 
@@ -1001,13 +1299,18 @@ Hub.grid = (function () {
       gearBtn.innerHTML = Hub.icons.settings;
       gearBtn.title = "Configure";
 
+      var copyBtn = document.createElement("button");
+      copyBtn.className = "widget-edit-btn is-copy";
+      copyBtn.innerHTML = Hub.icons.copy;
+      copyBtn.title = "Copy (⌘C)";
+
       var trashBtn = document.createElement("button");
       trashBtn.className = "widget-edit-btn is-trash";
       trashBtn.innerHTML = Hub.icons.trash2;
       trashBtn.title = "Remove";
 
-      leftGroup.appendChild(dragBtn);
       rightGroup.appendChild(gearBtn);
+      rightGroup.appendChild(copyBtn);
       rightGroup.appendChild(trashBtn);
       controls.appendChild(leftGroup);
       controls.appendChild(rightGroup);
@@ -1018,17 +1321,6 @@ Hub.grid = (function () {
       resizeHandle.innerHTML = Hub.icons.arrowDownRight;
       resizeHandle.title = "Drag to resize";
       w.appendChild(resizeHandle);
-
-      dragBtn.addEventListener("mousedown", function (e) {
-        e.preventDefault();
-        dragWidget = {
-          el: w,
-          startX: e.clientX,
-          startY: e.clientY,
-          origCol: parseInt(w.dataset.gridCol),
-          origRow: parseInt(w.dataset.gridRow)
-        };
-      });
 
       resizeHandle.addEventListener("mousedown", function (e) {
         e.preventDefault();
@@ -1044,9 +1336,45 @@ Hub.grid = (function () {
         };
       });
 
-      gearBtn.addEventListener("click", function () { openConfigModal(w.dataset.widgetId, onConfigSave); });
+      gearBtn.addEventListener("click", function () {
+        openFocusedWidgetConfig(w);
+      });
+
+      copyBtn.addEventListener("click", function () {
+        var src = editClone.find(function (ww) { return ww.id === w.dataset.widgetId; });
+        if (!src) return;
+        editClipboard = {
+          _srcId: src.id,
+          type: src.type,
+          width: src.width,
+          height: src.height,
+          minWidth: src.minWidth,
+          minHeight: src.minHeight,
+          config: JSON.parse(JSON.stringify(src.config || {})),
+          cardColor: src.cardColor ? Object.assign({}, src.cardColor) : undefined
+        };
+        pasteWidget();
+      });
 
       trashBtn.addEventListener("click", function () { removeWidget(w.dataset.widgetId, gridEl); });
+
+      w.addEventListener("mousedown", function (e) {
+        if (e.target.closest(".widget-edit-controls, .widget-resize-handle")) return;
+        beginWidgetDrag(w, e);
+      });
+
+      /* Clicking anywhere on the widget card selects it */
+      w.addEventListener("click", function (e) {
+        if (e.target.closest(".widget-edit-controls, .widget-resize-handle")) return;
+        e.preventDefault();
+        setEditFocus(w);
+      });
+
+      w.addEventListener("dblclick", function (e) {
+        if (e.target.closest(".widget-edit-controls, .widget-resize-handle")) return;
+        e.preventDefault();
+        openFocusedWidgetConfig(w);
+      });
     });
 
     /* Build chord map and stamp key badges onto each widget's drag handle */
@@ -1062,11 +1390,15 @@ Hub.grid = (function () {
       controls.appendChild(badge);
     });
 
+    /* Open sidebar; if a widget is focused it will auto-render via setEditFocus */
+    showConfigSidebarEmpty();
+
     if (focusWidgetId) {
       var focused = gridEl.querySelector('[data-widget-id="' + focusWidgetId + '"]');
       if (focused) {
         setEditFocus(focused);
         pulseAddedWidget(focused);
+        scrollToRevealBottom(focused, 32);
       }
     }
 
@@ -1126,6 +1458,7 @@ Hub.grid = (function () {
             minWidth: resizeWidget.minWidth,
             minHeight: resizeWidget.minHeight
           }));
+          scrollToRevealBottom(resizeWidget.el);
         }
       }
     }
@@ -1143,9 +1476,21 @@ Hub.grid = (function () {
     }
 
     function onEditEscape(e) {
-      if (e.key === "Escape" && !document.querySelector(".modal-overlay")) {
-        if (onCancel) onCancel();
+      if (e.key !== "Escape" || document.querySelector(".modal-overlay")) return;
+      if (configSidebar && configSidebar.classList.contains("is-open") && configSidebar.contains(document.activeElement)) {
+        /* If a form field or custom-select button currently has focus, let EditorKeyboard
+           handle Escape first (insert → normal mode). This listener fires before
+           EditorKeyboard because it was registered earlier — bail so the form isn't
+           closed while the user is still interacting with a field. */
+        var active = document.activeElement;
+        if (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" ||
+            (active.tagName === "BUTTON" && ("customSelect" in active.dataset || "customPicker" in active.dataset))) return;
+        /* Panel (normal mode) has focus → collapse back to empty state */
+        showConfigSidebarEmpty();
+        if (editFocusedWidget) editFocusedWidget.focus();
+        return;
       }
+      if (onCancel) onCancel();
     }
     document.addEventListener("keydown", onEditEscape);
 
@@ -1154,6 +1499,11 @@ Hub.grid = (function () {
 
     return function exitEditMode() {
       document.removeEventListener("keydown", onEditEscape);
+      if (configSidebar) {
+        if (configSidebar._cleanup) { configSidebar._cleanup(); configSidebar._cleanup = null; }
+        configSidebar.classList.remove("is-open");
+        document.body.classList.remove("config-sidebar-open");
+      }
       editing = false;
       editGrabbed = false;
       setEditFocus(null);
@@ -1168,6 +1518,9 @@ Hub.grid = (function () {
         input.tabIndex = 0;
       });
       editClone = null;
+      onAddedFn = null;
+      editOnConfigSave = null;
+      configSidebarWidgetId = null;
     };
   }
 
@@ -1187,6 +1540,80 @@ Hub.grid = (function () {
     return layout;
   }
 
+  /* ── Shared credential section renderer ──
+     Used by openConfigModal and by widgets that embed child editors (e.g. group tabs).
+     container   – DOM element to append the section into
+     plugin      – the widget plugin object (must have credentialFields)
+     widgetId    – the ID used to store/load credentials
+     isCancelled – optional function() → bool; if truthy result, the async append is a no-op
+     onReady     – optional callback fired after the section is appended (use to trigger rescan)
+  ── */
+  function renderCredentialSection(container, plugin, widgetId, isCancelled, onReady) {
+    if (!plugin.credentialFields || !plugin.credentialFields.length) return;
+    Hub.credentials.load(widgetId).then(function (savedCreds) {
+      if (isCancelled && isCancelled()) return;
+      var section = document.createElement("div");
+      section.className = "widget-editor-credentials";
+
+      var hdr = document.createElement("div");
+      hdr.className = "widget-editor-credentials-header";
+      hdr.textContent = "Credentials";
+      section.appendChild(hdr);
+
+      plugin.credentialFields.forEach(function (field) {
+        var row = document.createElement("div");
+        row.className = "widget-editor-credentials-row";
+
+        var lbl = document.createElement("label");
+        lbl.textContent = field.label;
+
+        var wrap = document.createElement("div");
+        wrap.className = "widget-editor-credentials-input-wrap";
+
+        var input = document.createElement("input");
+        input.type = "password";
+        input.placeholder = field.placeholder || "";
+        input.autocomplete = "off";
+        if (savedCreds[field.key]) input.value = savedCreds[field.key];
+
+        var toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "widget-editor-credentials-toggle";
+        toggle.textContent = "Show";
+        toggle.addEventListener("click", function () {
+          var isHidden = input.type === "password";
+          input.type = isHidden ? "text" : "password";
+          toggle.textContent = isHidden ? "Hide" : "Show";
+        });
+
+        input.addEventListener("blur", function () {
+          if (input.value !== "") {
+            Hub.credentials.save(widgetId, { [field.key]: input.value });
+          }
+        });
+
+        wrap.appendChild(input);
+        wrap.appendChild(toggle);
+        row.appendChild(lbl);
+        row.appendChild(wrap);
+        section.appendChild(row);
+      });
+
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "widget-editor-credentials-clear";
+      clearBtn.textContent = "Remove credentials";
+      clearBtn.addEventListener("click", function () {
+        Hub.credentials.clear(widgetId);
+        section.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+      });
+      section.appendChild(clearBtn);
+
+      container.appendChild(section);
+      if (onReady) onReady();
+    });
+  }
+
   return {
     COLS: COLS,
     applyLayout: applyLayout,
@@ -1199,6 +1626,18 @@ Hub.grid = (function () {
     openConfigModal: openConfigModal,
     openAddWidgetModal: openAddWidgetModal,
     handleEditKey: handleEditKey,
-    resolveLayoutChange: resolveLayoutChange
+    resolveLayoutChange: resolveLayoutChange,
+    formatConfigJSON: formatConfigJSON,
+    parseConfigJSON: parseConfigJSON,
+    rawFindInnerWordRange: rawFindInnerWordRange,
+    rawMoveWordBackward: rawMoveWordBackward,
+    rawMoveWordForward: rawMoveWordForward,
+    rawMoveWordEnd: rawMoveWordEnd,
+    rawMoveParagraphForward: rawJsonEditor.rawMoveParagraphForward,
+    rawMoveParagraphBackward: rawJsonEditor.rawMoveParagraphBackward,
+    rawFindMatchingBracket: rawFindMatchingBracket,
+    rawDeleteCurrentLine: rawDeleteCurrentLine,
+    rawPasteLine: rawPasteLine,
+    renderCredentialSection: renderCredentialSection
   };
 })();

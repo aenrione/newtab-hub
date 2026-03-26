@@ -327,6 +327,20 @@ function createHub() {
     iconMarkup() {
       return "";
     },
+    createCustomSelect(labelText, options, currentValue, onChange) {
+      const wrap = new FakeElement("div");
+      wrap.className = "editor-field";
+      const label = new FakeElement("span");
+      label.textContent = labelText;
+      wrap.appendChild(label);
+      const select = new FakeElement("select");
+      select.value = currentValue;
+      select.addEventListener("change", function (e) {
+        onChange(e && e.target ? e.target.value : select.value);
+      });
+      wrap.appendChild(select);
+      return wrap;
+    },
     uid() {
       return "widget-1";
     },

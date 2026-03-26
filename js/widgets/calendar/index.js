@@ -76,17 +76,17 @@ Hub.registry.register("calendar", {
     titleLabel.querySelector("input").addEventListener("input", function (e) { config.title = e.target.value; onChange(config); });
     container.appendChild(titleLabel);
 
-    var firstDayLabel = document.createElement("label");
-    firstDayLabel.className = "editor-field";
-    var firstDay = config.firstDay || "sun";
-    firstDayLabel.innerHTML =
-      '<span>First day of week</span>' +
-      '<select>' +
-        '<option value="sun"' + (firstDay === "sun" ? " selected" : "") + '>Sunday</option>' +
-        '<option value="mon"' + (firstDay === "mon" ? " selected" : "") + '>Monday</option>' +
-      '</select>';
-    firstDayLabel.querySelector("select").addEventListener("change", function (e) { config.firstDay = e.target.value; onChange(config); });
-    container.appendChild(firstDayLabel);
+    container.appendChild(Hub.createCustomSelect("First day of week", [
+      { value: "sun", label: "Sunday" },
+      { value: "mon", label: "Monday" }
+    ], config.firstDay || "sun", function (v) { config.firstDay = v; onChange(config); }));
+  },
+
+  rawEditorSchema: {
+    fields: {
+      title: { type: "string" },
+      firstDay: { type: "string", enum: ["sun", "mon"], description: "First day of week" }
+    }
   },
 
   defaultConfig: function () {
