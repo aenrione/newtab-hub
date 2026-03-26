@@ -267,11 +267,19 @@ Hub.customize = (function () {
     var styleGrid = document.createElement("div");
     styleGrid.className = "style-controls";
     var currentStyles = Object.assign({}, Hub.DEFAULT_STYLE);
+    var variantBtns;
     store.get(Hub.STORAGE_STYLE_KEY).then(function (saved) {
       if (saved) Object.assign(currentStyles, saved);
       styleGrid.querySelectorAll("[data-style-key]").forEach(function (inp) {
         if (currentStyles[inp.dataset.styleKey] != null) inp.value = currentStyles[inp.dataset.styleKey];
       });
+      /* Re-sync variant buttons after async load */
+      if (variantBtns) {
+        var effectiveVariant = currentStyles.styleVariant || "default";
+        variantBtns.querySelectorAll(".style-variant-btn").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.variant === effectiveVariant);
+        });
+      }
     });
 
     [{ key: "borderRadius", label: "Widget radius", max: 24 },
@@ -294,12 +302,13 @@ Hub.customize = (function () {
     variantRow.className = "style-control-row";
     var variantLabel = document.createElement("span");
     variantLabel.textContent = "Layout style";
-    var variantBtns = document.createElement("div");
+    variantBtns = document.createElement("div");
     variantBtns.className = "style-variant-btns";
 
     ["default", "flat"].forEach(function (v) {
       var btn = document.createElement("button");
-      btn.className = "style-variant-btn" + (currentStyles.styleVariant === v || (!currentStyles.styleVariant && v === "default") ? " active" : "");
+      btn.type = "button";
+      btn.className = "style-variant-btn" + (((currentStyles.styleVariant || "default") === v) ? " active" : "");
       btn.dataset.variant = v;
       btn.textContent = v.charAt(0).toUpperCase() + v.slice(1);
       btn.addEventListener("click", function () {
@@ -787,6 +796,12 @@ Hub.customize = (function () {
     footer.querySelector("[data-theme-reset]").addEventListener("click", async function () {
       Hub.applyColorScheme(Hub.DEFAULT_COLORS);
       Hub.applyStyleOverrides(Hub.DEFAULT_STYLE);
+      currentStyles.styleVariant = "default";
+      if (variantBtns) {
+        variantBtns.querySelectorAll(".style-variant-btn").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.variant === "default");
+        });
+      }
       Hub.applyCustomCss("");
       await store.set(Hub.STORAGE_THEME_KEY, {});
       await store.set(Hub.STORAGE_STYLE_KEY, {});
