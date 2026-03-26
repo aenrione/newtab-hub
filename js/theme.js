@@ -30,7 +30,8 @@ Hub.DEFAULT_STYLE = {
   borderRadius: "10",
   borderWidth: "1",
   widgetBorderRadius: "10",
-  searchBorderRadius: "6"
+  searchBorderRadius: "6",
+  styleVariant: "default"
 };
 
 Hub.HINT_KEYS = ["hintBg", "hintText", "hintBorder", "hintAccentBg", "hintAccentText", "hintAccentBorder"];
@@ -416,6 +417,16 @@ Hub.applyStyleOverrides = function (styles) {
   root.style.setProperty("--radius-md", merged.searchBorderRadius + "px");
   root.style.setProperty("--radius-sm", Math.max(2, Math.floor(parseInt(merged.searchBorderRadius) / 2)) + "px");
   root.style.setProperty("--border-width", merged.borderWidth + "px");
+  Hub.applyStyleVariant(merged.styleVariant);
+};
+
+Hub.applyStyleVariant = function (variant) {
+  var body = document.body;
+  if (!body || !body.classList) return;
+  body.classList.remove("theme-flat");
+  if (variant === "flat") {
+    body.classList.add("theme-flat");
+  }
 };
 
 Hub.applyCustomCss = function (css) {

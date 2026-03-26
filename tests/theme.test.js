@@ -36,7 +36,17 @@ describe("theme hint color persistence", function () {
           })
         }
       },
-      body: { style: {} }
+      body: (function () {
+        var classes = [];
+        return {
+          style: { background: "" },
+          classList: {
+            add: function (cls) { if (classes.indexOf(cls) === -1) classes.push(cls); },
+            remove: function (cls) { classes = classes.filter(function (c) { return c !== cls; }); },
+            contains: function (cls) { return classes.indexOf(cls) !== -1; }
+          }
+        };
+      }())
     };
     global.getComputedStyle = jest.fn(function () {
       return {
@@ -204,5 +214,35 @@ describe("theme hint color persistence", function () {
 
     expect(loaded.hintText).toBe("#101010");
     expect(Hub.getPreferredThemeScope(store.state[Hub.STORAGE_THEME_KEY], "personal")).toBe("profile");
+  });
+
+  describe("applyStyleVariant", function () {
+    test("adds theme-flat class when variant is flat", function () {
+      Hub.applyStyleVariant("flat");
+      expect(document.body.classList.contains("theme-flat")).toBe(true);
+    });
+
+    test("removes theme-flat class when switching to default", function () {
+      Hub.applyStyleVariant("flat");
+      Hub.applyStyleVariant("default");
+      expect(document.body.classList.contains("theme-flat")).toBe(false);
+    });
+
+    test("removes theme-flat class when called with no argument", function () {
+      Hub.applyStyleVariant("flat");
+      Hub.applyStyleVariant();
+      expect(document.body.classList.contains("theme-flat")).toBe(false);
+    });
+
+    test("applyStyleOverrides calls applyStyleVariant with styleVariant from styles", function () {
+      Hub.applyStyleOverrides({ styleVariant: "flat" });
+      expect(document.body.classList.contains("theme-flat")).toBe(true);
+    });
+
+    test("applyStyleOverrides uses DEFAULT_STYLE.styleVariant when not in overrides", function () {
+      Hub.applyStyleVariant("flat");           // pre-set
+      Hub.applyStyleOverrides({});             // no styleVariant key
+      expect(document.body.classList.contains("theme-flat")).toBe(false);
+    });
   });
 });
