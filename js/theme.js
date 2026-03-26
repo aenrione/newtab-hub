@@ -24,6 +24,8 @@ Hub.DEFAULT_COLORS = {
   down: "#f87171"
 };
 
+Hub.currentColorScheme = Object.assign({}, Hub.DEFAULT_COLORS);
+
 Hub.DEFAULT_STYLE = {
   borderRadius: "10",
   borderWidth: "1",
@@ -145,6 +147,27 @@ Hub.CSS_VAR_MAP = {
   ok: "--ok",
   warn: "--warn",
   down: "--down"
+};
+
+Hub.getThemeColorValue = function (key) {
+  var currentScheme = Hub.currentColorScheme || {};
+  var currentValue = typeof currentScheme[key] === "string" ? currentScheme[key].trim() : "";
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(currentValue)) return currentValue;
+
+  var cssVar = Hub.CSS_VAR_MAP[key];
+  if (cssVar && typeof getComputedStyle === "function" && typeof document !== "undefined" && document.documentElement) {
+    var computedValue = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(computedValue)) return computedValue;
+  }
+
+  return Hub.DEFAULT_COLORS[key];
+};
+
+Hub.getPreferredThemeScope = function (themeState, profileName) {
+  var state = themeState || {};
+  var profileOverride = state[profileName];
+  if (profileOverride && Object.keys(profileOverride).length) return "profile";
+  return "global";
 };
 
 Hub.STYLE_VAR_MAP = {
@@ -375,6 +398,7 @@ Hub.THEME_PRESETS = {
 
 Hub.applyColorScheme = function (scheme) {
   var merged = Hub.resolveColorScheme(scheme);
+  Hub.currentColorScheme = Object.assign({}, merged);
   var root = document.documentElement;
   Object.keys(Hub.CSS_VAR_MAP).forEach(function (key) {
     root.style.setProperty(Hub.CSS_VAR_MAP[key], merged[key]);
