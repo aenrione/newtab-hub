@@ -11,6 +11,22 @@ self.webdav = (function () {
     return { ok: ok, status: status, message: message, data: data || null };
   }
 
+  function canonicalizeEtag(value) {
+    if (!value) return null;
+    var etag = String(value).trim();
+    if (!etag) return null;
+    etag = etag.replace(/^W\//i, "");
+    if (etag.charAt(0) === '"' && etag.charAt(etag.length - 1) === '"') {
+      etag = etag.slice(1, -1);
+    }
+    etag = etag.replace(/-gzip$/i, "");
+    return etag || null;
+  }
+
+  function extractRawEtag(resp) {
+    return resp.headers.get("ETag") || resp.headers.get("Last-Modified") || null;
+  }
+
   /* If the URL looks like a directory (last segment has no dot), append newtab.json */
   function normalizeUrl(url) {
     var clean = url.replace(/\/$/, "");
@@ -69,7 +85,7 @@ self.webdav = (function () {
   /* Extract the best available cache-validator from response headers.
      Prefer ETag (content-based); fall back to Last-Modified (time-based). */
   function extractEtag(resp) {
-    return resp.headers.get("ETag") || resp.headers.get("Last-Modified") || null;
+    return canonicalizeEtag(extractRawEtag(resp));
   }
 
   async function upload(url, username, password, payload, options) {
@@ -93,6 +109,7 @@ self.webdav = (function () {
       if (!resp.ok) return normalize(false, resp.status, "Upload failed: server returned " + resp.status);
       var r = normalize(true, resp.status, "Uploaded");
       r.etag = extractEtag(resp);
+      r.rawEtag = extractRawEtag(resp);
       return r;
     } catch (err) {
       return normalize(false, 0, err.message || "Network error");
@@ -116,6 +133,7 @@ self.webdav = (function () {
       }
       var r = normalize(true, resp.status, "Downloaded", data);
       r.etag = extractEtag(resp);
+      r.rawEtag = extractRawEtag(resp);
       return r;
     } catch (err) {
       return normalize(false, 0, err.message || "Network error");
@@ -134,12 +152,13 @@ self.webdav = (function () {
       if (!resp.ok) return normalize(false, resp.status, "Check failed");
       var r = normalize(true, resp.status, "OK");
       r.etag = extractEtag(resp);
+      r.rawEtag = extractRawEtag(resp);
       return r;
     } catch (err) {
       return normalize(false, 0, err.message || "Network error");
     }
   }
 
-  return { test: test, upload: upload, download: download, check: check };
+  return { test: test, upload: upload, download: download, check: check, canonicalizeEtag: canonicalizeEtag };
 
 }());

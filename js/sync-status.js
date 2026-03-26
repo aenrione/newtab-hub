@@ -31,6 +31,16 @@ Hub.syncStatus = (function () {
     return Math.floor(diff / 86400) + "d ago";
   }
 
+  function getDerivedConflictMessage(remoteUpdate, dirty) {
+    if (!remoteUpdate || !dirty) return "";
+    return "Cloud config changed while this device still has unsynced local edits. Resolve the conflict in the sync popup";
+  }
+
+  function isDisconnectedError(error) {
+    var text = String(error || "").toLowerCase();
+    return !!text && text !== "invalid credentials";
+  }
+
   /* ── Badge rendering ── */
 
   function renderBadge(storage) {
@@ -41,6 +51,8 @@ Hub.syncStatus = (function () {
     var last   = storage["new-tab-sync-last"] || null;
     var error  = storage["new-tab-sync-error"] || null;
     var dirty  = !!storage["new-tab-sync-dirty"];
+    var remoteUpdate = !!storage["new-tab-sync-remote-update-available"];
+    var derivedConflict = getDerivedConflictMessage(remoteUpdate, dirty);
 
     /* Hide badge when no WebDAV URL is configured */
     if (!url) {
@@ -63,24 +75,38 @@ Hub.syncStatus = (function () {
       badge.classList.add("is-error");
       badge.classList.remove("is-conflict");
       iconEl.innerHTML = ALERT_SVG;
-      labelEl.textContent = "Sync error";
+      labelEl.textContent = isDisconnectedError(error) ? "Disconnected" : "Sync error";
       badge.title = error || "Unknown error";
     } else if (status === "conflict") {
-      badge.classList.remove("is-error");
-      badge.classList.add("is-conflict");
-      iconEl.innerHTML = CONFLICT_SVG;
-      labelEl.textContent = "Conflict";
-      badge.title = error || "Local and cloud changes conflict";
+      if (derivedConflict) {
+        badge.classList.remove("is-error");
+        badge.classList.add("is-conflict");
+        iconEl.innerHTML = CONFLICT_SVG;
+        labelEl.textContent = "Conflict";
+        badge.title = error || derivedConflict;
+      } else {
+        badge.classList.add("is-error");
+        badge.classList.remove("is-conflict");
+        iconEl.innerHTML = ALERT_SVG;
+        labelEl.textContent = "Upload blocked";
+        badge.title = error || "Your local changes are preserved on this device";
+      }
     } else {
       badge.classList.remove("is-error");
       badge.classList.remove("is-conflict");
       /* idle (default) */
       iconEl.innerHTML = CLOUD_SVG;
-      if (dirty) {
+      if (derivedConflict) {
+        labelEl.textContent = "Conflict";
+        badge.title = derivedConflict;
+      } else if (dirty) {
         labelEl.textContent = "Local changes";
         badge.title = last
           ? "Unsynced local changes since " + new Date(last).toLocaleString()
           : "Unsynced local changes on this device";
+      } else if (remoteUpdate) {
+        labelEl.textContent = "Cloud newer";
+        badge.title = "Cloud has a newer snapshot available to pull. Local settings stay untouched until you pull manually.";
       } else if (last) {
         labelEl.textContent = relativeTime(last);
         badge.title = "Last synced: " + new Date(last).toLocaleString();
@@ -117,27 +143,42 @@ Hub.syncStatus = (function () {
     }, 3000);
   }
 
-  function showConfirmToast(onConfirm) {
+  function showConfirmToast(onConfirm, options) {
     if (!toastContainer) return;
+    options = options || {};
+    var allowForce = !!options.allowForce;
+    var onForce = typeof options.onForce === "function" ? options.onForce : null;
+    var message = options.message || (allowForce ? "Push to WebDAV? Force overwrites cloud." : "Push to WebDAV?");
+    var yesLabel = options.yesLabel || "Yes [Enter]";
+    var noLabel = options.noLabel || "No [Esc]";
 
     var toast = document.createElement("div");
     toast.className = "sync-toast is-confirm";
 
     var msg = document.createElement("span");
-    msg.textContent = "Push to WebDAV?";
+    msg.textContent = message;
 
     var yesBtn = document.createElement("button");
     yesBtn.type = "button";
     yesBtn.className = "sync-toast-btn sync-toast-yes";
-    yesBtn.textContent = "Yes [Enter]";
+    yesBtn.textContent = yesLabel;
+
+    var forceBtn = null;
+    if (allowForce) {
+      forceBtn = document.createElement("button");
+      forceBtn.type = "button";
+      forceBtn.className = "sync-toast-btn sync-toast-force";
+      forceBtn.textContent = "Force [F]";
+    }
 
     var noBtn = document.createElement("button");
     noBtn.type = "button";
     noBtn.className = "sync-toast-btn sync-toast-no";
-    noBtn.textContent = "No [Esc]";
+    noBtn.textContent = noLabel;
 
     toast.appendChild(msg);
     toast.appendChild(yesBtn);
+    if (forceBtn) toast.appendChild(forceBtn);
     toast.appendChild(noBtn);
     toastContainer.appendChild(toast);
 
@@ -153,7 +194,11 @@ Hub.syncStatus = (function () {
     }
 
     function onKey(e) {
-      if (e.key === "Enter" || e.key === "y" || e.key === "Y") {
+      if (allowForce && onForce && ((e.key === "F" || e.key === "f") || (e.key === "Enter" && e.shiftKey))) {
+        e.preventDefault();
+        remove();
+        onForce();
+      } else if (e.key === "Enter" || e.key === "y" || e.key === "Y") {
         e.preventDefault();
         remove();
         onConfirm();
@@ -169,6 +214,13 @@ Hub.syncStatus = (function () {
       remove();
       onConfirm();
     });
+
+    if (forceBtn) {
+      forceBtn.addEventListener("click", function () {
+        remove();
+        onForce();
+      });
+    }
 
     noBtn.addEventListener("click", function () {
       remove();
@@ -186,7 +238,7 @@ Hub.syncStatus = (function () {
 
   /* ── Storage change listener ── */
 
-  var WATCH_KEYS = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-webdav-url"];
+  var WATCH_KEYS = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-remote-update-available", "new-tab-webdav-url"];
 
   function onStorageChanged(changes, area) {
     if (area !== "local") return;
@@ -235,7 +287,7 @@ Hub.syncStatus = (function () {
     document.body.appendChild(toastContainer);
 
     /* Read initial storage and render */
-    storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty"])
+    storageGet(["new-tab-webdav-url", "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-remote-update-available"])
       .then(function (storage) {
         currentData = storage;
         renderBadge(currentData);
@@ -255,21 +307,35 @@ Hub.syncStatus = (function () {
   function pull() {
     if (!currentData["new-tab-webdav-url"]) return;
     if (currentData["new-tab-sync-status"] === "syncing") return;
-    pendingToast = "pull";
-    if (typeof chrome !== "undefined" && chrome.runtime) {
-      chrome.runtime.sendMessage({ action: "syncDownload" });
-    }
+    showConfirmToast(function () {
+      pendingToast = "pull";
+      if (typeof chrome !== "undefined" && chrome.runtime) {
+        chrome.runtime.sendMessage({ action: "syncDownload" });
+      }
+    }, {
+      message: "Pull from cloud? This saves a local backup first, replaces this device, and lets you undo the pull later.",
+      yesLabel: "Pull [Enter]"
+    });
   }
 
   function confirmPush() {
     if (!currentData["new-tab-webdav-url"]) return;
     if (currentData["new-tab-sync-status"] === "syncing") return;
+    var allowForce = currentData["new-tab-sync-status"] === "conflict";
     showConfirmToast(function () {
       pendingToast = "push";
       if (typeof chrome !== "undefined" && chrome.runtime) {
         chrome.runtime.sendMessage({ action: "syncUpload" });
       }
-    });
+    }, allowForce ? {
+      allowForce: true,
+      onForce: function () {
+        pendingToast = "push";
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+          chrome.runtime.sendMessage({ action: "syncUploadForce" });
+        }
+      }
+    } : null);
   }
 
   return {

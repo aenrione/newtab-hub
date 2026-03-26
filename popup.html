@@ -103,6 +103,44 @@
       padding: 5px 7px;
       font-size: 11px;
     }
+    .secondary-action {
+      margin-top: 6px;
+      background: #252525;
+    }
+    .detail-toggle {
+      margin-top: 6px;
+      padding: 6px 7px;
+      font-size: 11px;
+      background: #24201a;
+      border-color: #5b4c2b;
+      color: #e6c98b;
+    }
+    .detail-panel {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #3a3326;
+      border-radius: 5px;
+      background: #1f1b15;
+      font-size: 11px;
+      color: #d8d1c0;
+    }
+    .detail-panel strong {
+      color: #f0dfb4;
+    }
+    .detail-panel p { margin-bottom: 6px; }
+    .detail-panel p:last-child { margin-bottom: 0; }
+    .detail-panel pre {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      background: #15120e;
+      color: #ddd6c7;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 10px;
+      line-height: 1.4;
+    }
     a.edit-link {
       display: block;
       font-size: 11px;
@@ -146,7 +184,10 @@
     <div id="status-line" class="status-line"></div>
     <div id="status-hint" class="status-hint"></div>
     <button id="btn-upload" class="primary">Upload Now</button>
-    <button id="btn-download">Download Now</button>
+    <button id="btn-download">Pull From Cloud</button>
+    <button id="btn-undo-pull" class="secondary-action hidden">Undo Last Pull</button>
+    <button id="btn-conflict-details" class="detail-toggle hidden">See conflict details</button>
+    <div id="conflict-details" class="detail-panel hidden"></div>
     <div id="backup-panel" class="backup-panel hidden">
       <div class="backup-title">Local safety backups</div>
       <div id="backup-list" class="backup-list"></div>

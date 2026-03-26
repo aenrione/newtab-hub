@@ -4,6 +4,15 @@ var WEBDAV_URL_KEY  = "new-tab-webdav-url";
 var WEBDAV_USER_KEY = "new-tab-webdav-username";
 var WEBDAV_PASS_KEY = "new-tab-webdav-password";
 
+var SYNC_STATUS_KEY      = "new-tab-sync-status";
+var SYNC_LAST_KEY        = "new-tab-sync-last";
+var SYNC_ERROR_KEY       = "new-tab-sync-error";
+var SYNC_DIRTY_KEY       = "new-tab-sync-dirty";
+var SYNC_BACKUPS_KEY     = "new-tab-sync-local-backups";
+var SYNC_REMOTE_UPDATE_KEY    = "new-tab-sync-remote-update-available";
+var SYNC_LAST_PULL_BACKUP_KEY = "new-tab-sync-last-pull-backup-id";
+var SYNC_AUTH_FAILED_KEY = "new-tab-sync-auth-failed";
+
 /* ── DOM refs ── */
 var viewConfig  = document.getElementById("view-config");
 var viewStatus  = document.getElementById("view-status");
@@ -17,11 +26,16 @@ var btnTest     = document.getElementById("btn-test");
 var btnSave     = document.getElementById("btn-save");
 var btnUpload   = document.getElementById("btn-upload");
 var btnDownload = document.getElementById("btn-download");
+var btnUndoPull = document.getElementById("btn-undo-pull");
+var btnConflictDetails = document.getElementById("btn-conflict-details");
 var btnEdit     = document.getElementById("btn-edit");
+var conflictDetails = document.getElementById("conflict-details");
 var backupPanel = document.getElementById("backup-panel");
 var backupList  = document.getElementById("backup-list");
 var backupEmpty = document.getElementById("backup-empty");
 var currentSyncData = {};
+var conflictDetailsOpen = false;
+var conflictDebugData = null;
 
 /* ── Storage helpers ── */
 
@@ -47,17 +61,129 @@ function showMsg(text, cls) {
 function setButtons(disabled) {
   btnUpload.disabled  = disabled;
   btnDownload.disabled = disabled;
+  btnUndoPull.disabled = disabled;
+}
+
+function renderUndoButton(data) {
+  var visible = !!(data && data[SYNC_LAST_PULL_BACKUP_KEY]);
+  btnUndoPull.classList.toggle("hidden", !visible);
+}
+
+function getConflictDetails(data) {
+  var status = data[SYNC_STATUS_KEY];
+  var err = data[SYNC_ERROR_KEY];
+  var dirty = !!data[SYNC_DIRTY_KEY];
+  var remoteUpdate = !!data[SYNC_REMOTE_UPDATE_KEY];
+  var derivedConflict = getDerivedConflictMessage(remoteUpdate, dirty);
+
+  if (status !== "conflict" && !derivedConflict) return null;
+  if (!derivedConflict && !remoteUpdate) return null;
+
+  return {
+    title: derivedConflict || err || "Local and cloud changed",
+    body: [
+      dirty ? "<strong>Local:</strong> This device has edits that only exist here until you upload them." : "<strong>Local:</strong> No unsynced local edits detected.",
+      remoteUpdate ? "<strong>Cloud:</strong> The cloud copy is newer than the last version this device synced against." : "<strong>Cloud:</strong> Remote state differs from this device.",
+      "<strong>Safe actions:</strong> Upload to keep this device, or pull manually to restore the cloud copy. Pull is undoable.",
+      "<strong>Automatic behavior:</strong> Nothing is overwritten automatically."
+    ]
+  };
+}
+
+function formatConflictSummary(details) {
+  if (!details || !details.diff) return "";
+  var diff = details.diff;
+  var parts = [];
+  if (diff.differingKeys && diff.differingKeys.length) {
+    parts.push("Top-level keys with different values: " + diff.differingKeys.join(", "));
+  }
+  if (diff.profiles && diff.profiles.changed && diff.profiles.changed.length) {
+    parts.push("Profiles changed on both sides: " + diff.profiles.changed.join(", "));
+  }
+  if (diff.profiles && diff.profiles.localOnly && diff.profiles.localOnly.length) {
+    parts.push("Profiles only on this device: " + diff.profiles.localOnly.join(", "));
+  }
+  if (diff.profiles && diff.profiles.remoteOnly && diff.profiles.remoteOnly.length) {
+    parts.push("Profiles only in cloud: " + diff.profiles.remoteOnly.join(", "));
+  }
+  if (diff.overrides && diff.overrides.changed && diff.overrides.changed.length) {
+    parts.push("Profile overrides changed on both sides: " + diff.overrides.changed.join(", "));
+  }
+  if (diff.overrides && diff.overrides.fieldDiffs) {
+    Object.keys(diff.overrides.fieldDiffs).forEach(function (name) {
+      var fields = (diff.overrides.fieldDiffs[name] || []).map(function (change) { return change.field; });
+      if (fields.length) parts.push("Override fields changed for " + name + ": " + fields.join(", "));
+    });
+  }
+  return parts.join("\n");
+}
+
+function safeJson(value) {
+  return JSON.stringify(value, null, 2);
+}
+
+async function loadConflictDebugData() {
+  btnConflictDetails.disabled = true;
+  conflictDetails.innerHTML = "<p>Loading conflict details…</p>";
+  conflictDetails.classList.remove("hidden");
+  var resp = await sendToBackground({ action: "getSyncConflictDetails" });
+  btnConflictDetails.disabled = false;
+  if (resp.error) {
+    conflictDebugData = { ok: false, message: "Could not reach background service" };
+    return;
+  }
+  if (resp && resp.received === true && typeof resp.ok === "undefined") {
+    conflictDebugData = {
+      ok: false,
+      message: "Conflict inspection is unavailable in the current service worker. Reload the extension or reopen the new tab, then try again."
+    };
+    return;
+  }
+  conflictDebugData = resp;
+}
+
+function renderConflictDetails(data) {
+  var details = getConflictDetails(data || {});
+  if (!details) {
+    conflictDetailsOpen = false;
+    conflictDebugData = null;
+    btnConflictDetails.classList.add("hidden");
+    conflictDetails.classList.add("hidden");
+    conflictDetails.innerHTML = "";
+    return;
+  }
+
+  btnConflictDetails.classList.remove("hidden");
+  btnConflictDetails.textContent = conflictDetailsOpen ? "Hide conflict details" : "See conflict details";
+  var html = "<p><strong>Conflict</strong></p><p>" + details.title + "</p><p>" + details.body.join("</p><p>") + "</p>";
+  if (conflictDebugData) {
+    html += "<p><strong>Debug summary</strong></p><p>" + (formatConflictSummary(conflictDebugData) || "No detailed differences detected yet.").replace(/\n/g, "</p><p>") + "</p>";
+    html += "<pre>" + safeJson(conflictDebugData) + "</pre>";
+  }
+  conflictDetails.innerHTML = html;
+  conflictDetails.classList.toggle("hidden", !conflictDetailsOpen);
 }
 
 function formatReason(reason) {
-  if (reason === "before-download") return "Saved before replacing local settings";
+  if (reason === "before-pull") return "Saved before pulling from cloud";
   if (reason === "before-restore") return "Saved before restoring an older backup";
+  if (reason === "before-undo-pull") return "Saved before undoing the previous pull";
   return reason || "Local snapshot";
 }
 
 function formatBackupTime(iso) {
   if (!iso) return "Unknown time";
   return new Date(iso).toLocaleString();
+}
+
+function getDerivedConflictMessage(remoteUpdate, dirty) {
+  if (!remoteUpdate || !dirty) return "";
+  return "Cloud config changed while this device still has unsynced local edits. Resolve the conflict in the sync popup";
+}
+
+function isDisconnectedError(error) {
+  var text = String(error || "").toLowerCase();
+  return !!text && text !== "invalid credentials";
 }
 
 function renderBackups(backups) {
@@ -96,10 +222,12 @@ function renderBackups(backups) {
 }
 
 function formatStatus(data) {
-  var status = data["new-tab-sync-status"];
-  var last   = data["new-tab-sync-last"];
-  var err    = data["new-tab-sync-error"];
-  var dirty  = !!data["new-tab-sync-dirty"];
+  var status = data[SYNC_STATUS_KEY];
+  var last   = data[SYNC_LAST_KEY];
+  var err    = data[SYNC_ERROR_KEY];
+  var dirty  = !!data[SYNC_DIRTY_KEY];
+  var remoteUpdate = !!data[SYNC_REMOTE_UPDATE_KEY];
+  var derivedConflict = getDerivedConflictMessage(remoteUpdate, dirty);
 
   setButtons(status === "syncing");
   statusHint.textContent = "";
@@ -111,15 +239,35 @@ function formatStatus(data) {
     return;
   }
   if (status === "error") {
-    statusLine.className = "status-line error";
-    statusLine.textContent = "Error: " + (err || "unknown");
-    if (dirty) statusHint.textContent = "Local changes are still waiting to be uploaded.";
+    if (isDisconnectedError(err)) {
+      statusLine.className = "status-line conflict";
+      statusLine.textContent = "Disconnected";
+      statusHint.textContent = dirty
+        ? "Local changes are safe on this device. Reconnect, then upload when you are ready."
+        : (err || "Could not reach cloud sync right now.");
+    } else {
+      statusLine.className = "status-line error";
+      statusLine.textContent = "Error: " + (err || "unknown");
+      if (dirty) statusHint.textContent = "Local changes are still waiting to be uploaded.";
+    }
     return;
   }
   if (status === "conflict") {
+    if (derivedConflict) {
+      statusLine.className = "status-line conflict";
+      statusLine.textContent = "Conflict: " + (err || derivedConflict);
+      statusHint.textContent = "Upload to keep local changes or download to replace them. A backup is kept before destructive restores.";
+      return;
+    }
+    statusLine.className = "status-line error";
+    statusLine.textContent = "Upload blocked";
+    statusHint.textContent = err || "Your local changes are preserved on this device.";
+    return;
+  }
+  if (derivedConflict) {
     statusLine.className = "status-line conflict";
-    statusLine.textContent = "Conflict: " + (err || "Local and cloud changed");
-    statusHint.textContent = "Upload to keep local changes or download to replace them. A backup is kept before destructive restores.";
+    statusLine.textContent = "Conflict: " + derivedConflict;
+    statusHint.textContent = "Local changes are preserved until you manually choose upload or pull.";
     return;
   }
   if (dirty) {
@@ -128,6 +276,12 @@ function formatStatus(data) {
     statusHint.textContent = last
       ? "Last clean sync: " + new Date(last).toLocaleString()
       : "These edits exist only on this device until you upload them.";
+    return;
+  }
+  if (remoteUpdate) {
+    statusLine.className = "status-line conflict";
+    statusLine.textContent = "Cloud has a newer snapshot";
+    statusHint.textContent = "Your current local setup is untouched. Pull manually if you want to restore the cloud version.";
     return;
   }
   statusLine.className = "status-line ok";
@@ -152,7 +306,9 @@ function showStatusView(storageData) {
   currentSyncData = storageData || {};
   setButtons(false);
   formatStatus(storageData);
-  renderBackups(currentSyncData["new-tab-sync-local-backups"] || []);
+  renderConflictDetails(currentSyncData);
+  renderBackups(currentSyncData[SYNC_BACKUPS_KEY] || []);
+  renderUndoButton(currentSyncData);
 }
 
 function disableWithError() {
@@ -210,28 +366,34 @@ function sendToBackground(msg) {
 
 /* ── Credential save ── */
 
+var SYNC_WATCHED_KEYS = [
+  SYNC_STATUS_KEY, SYNC_LAST_KEY, SYNC_ERROR_KEY, SYNC_DIRTY_KEY,
+  SYNC_BACKUPS_KEY, SYNC_REMOTE_UPDATE_KEY, SYNC_LAST_PULL_BACKUP_KEY
+];
+
 async function forceSave(url, user, pass) {
   await storageSet({
-    [WEBDAV_URL_KEY]:  url,
-    [WEBDAV_USER_KEY]: user,
-    [WEBDAV_PASS_KEY]: pass,
-    "new-tab-sync-auth-failed": false
+    [WEBDAV_URL_KEY]:      url,
+    [WEBDAV_USER_KEY]:     user,
+    [WEBDAV_PASS_KEY]:     pass,
+    [SYNC_AUTH_FAILED_KEY]: false
   });
   btnSave.disabled = false;
-  showStatusView({ "new-tab-sync-status": "idle", "new-tab-sync-last": null, "new-tab-sync-error": null });
+  showStatusView({ [SYNC_STATUS_KEY]: "idle", [SYNC_LAST_KEY]: null, [SYNC_ERROR_KEY]: null });
 }
 
 /* ── Init ── */
 
+function pickFromChanges(changes, key, fallback) {
+  return changes[key] ? changes[key].newValue : fallback[key];
+}
+
 async function init() {
-  var data = await storageGet([
-    WEBDAV_URL_KEY, WEBDAV_USER_KEY,
-    "new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-local-backups"
-  ]);
+  var data = await storageGet([WEBDAV_URL_KEY, WEBDAV_USER_KEY].concat(SYNC_WATCHED_KEYS));
 
   if (data[WEBDAV_URL_KEY]) {
     showStatusView(data);
-    renderBackups(data["new-tab-sync-local-backups"] || []);
+    renderBackups(data[SYNC_BACKUPS_KEY] || []);
   } else {
     showConfigView(null, null);
   }
@@ -240,25 +402,23 @@ async function init() {
      to avoid a redundant storageGet round-trip and stale-render risk. */
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== "local") return;
-    var syncKeys = ["new-tab-sync-status", "new-tab-sync-last", "new-tab-sync-error", "new-tab-sync-dirty", "new-tab-sync-local-backups"];
-    if (!syncKeys.some(function (k) { return changes[k]; })) return;
+    if (!SYNC_WATCHED_KEYS.some(function (k) { return changes[k]; })) return;
     var snapshot = {
-      "new-tab-sync-status": changes["new-tab-sync-status"]
-        ? changes["new-tab-sync-status"].newValue : data["new-tab-sync-status"],
-      "new-tab-sync-last": changes["new-tab-sync-last"]
-        ? changes["new-tab-sync-last"].newValue : data["new-tab-sync-last"],
-      "new-tab-sync-error": changes["new-tab-sync-error"]
-        ? changes["new-tab-sync-error"].newValue : data["new-tab-sync-error"],
-      "new-tab-sync-dirty": changes["new-tab-sync-dirty"]
-        ? changes["new-tab-sync-dirty"].newValue : data["new-tab-sync-dirty"],
-      "new-tab-sync-local-backups": changes["new-tab-sync-local-backups"]
-        ? changes["new-tab-sync-local-backups"].newValue : data["new-tab-sync-local-backups"]
+      [SYNC_STATUS_KEY]:           pickFromChanges(changes, SYNC_STATUS_KEY, data),
+      [SYNC_LAST_KEY]:             pickFromChanges(changes, SYNC_LAST_KEY, data),
+      [SYNC_ERROR_KEY]:            pickFromChanges(changes, SYNC_ERROR_KEY, data),
+      [SYNC_DIRTY_KEY]:            pickFromChanges(changes, SYNC_DIRTY_KEY, data),
+      [SYNC_BACKUPS_KEY]:          pickFromChanges(changes, SYNC_BACKUPS_KEY, data),
+      [SYNC_REMOTE_UPDATE_KEY]:    pickFromChanges(changes, SYNC_REMOTE_UPDATE_KEY, data),
+      [SYNC_LAST_PULL_BACKUP_KEY]: pickFromChanges(changes, SYNC_LAST_PULL_BACKUP_KEY, data)
     };
     /* Keep data in sync for future events */
     Object.assign(data, snapshot);
     currentSyncData = data;
     formatStatus(snapshot);
-    renderBackups(snapshot["new-tab-sync-local-backups"] || []);
+    renderConflictDetails(snapshot);
+    renderBackups(snapshot[SYNC_BACKUPS_KEY] || []);
+    renderUndoButton(snapshot);
   });
 }
 
@@ -323,17 +483,34 @@ btnUpload.addEventListener("click", async function () {
 
 btnDownload.addEventListener("click", async function () {
   var action = "syncDownload";
-  var prompt = "This will replace all your current settings. Continue?";
-  if (statusLine.classList.contains("conflict") || !!currentSyncData["new-tab-sync-dirty"]) {
-    prompt = "This will replace your local settings with the cloud copy and save a local backup first. Continue?";
-    action = "syncDownloadForce";
-  }
+  var prompt = "This will save a local backup, replace this device with the cloud copy, and let you undo that pull later. Continue?";
   if (!confirm(prompt)) return;
   setButtons(true);
   var resp = await sendToBackground({ action: action });
   if (resp.error) { disableWithError(); return; }
   /* Buttons stay disabled; formatStatus re-enables them via storage.onChanged
      once the background reports the final status (idle or error). */
+});
+
+btnUndoPull.addEventListener("click", async function () {
+  if (!confirm("Undo the last pull and restore the local state from before it?")) return;
+  setButtons(true);
+  var resp = await sendToBackground({ action: "undoLastPull" });
+  if (resp.error) { disableWithError(); return; }
+});
+
+btnConflictDetails.addEventListener("click", function () {
+  conflictDetailsOpen = !conflictDetailsOpen;
+  if (!conflictDetailsOpen) {
+    renderConflictDetails(currentSyncData);
+    return;
+  }
+  loadConflictDebugData().then(function () {
+    renderConflictDetails(currentSyncData);
+  }).catch(function () {
+    conflictDebugData = { ok: false, message: "Could not load conflict details" };
+    renderConflictDetails(currentSyncData);
+  });
 });
 
 init();
