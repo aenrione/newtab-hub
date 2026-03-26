@@ -221,8 +221,10 @@ body:has(.shell.zen-mode) > #hub-bg-video {
 /* ── Flat theme variant ───────────────────────────────── */
 body.theme-flat .widget {
   background: transparent;
-  border: none;
+  border-top: none;
+  border-right: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  /* Left strip uses widget's custom color at 50% opacity; transparent for un-customized widgets */
   border-left: 2px solid color-mix(in srgb, var(--widget-surface, transparent) 50%, transparent);
   border-radius: 0;
   padding: 8px 10px 8px 12px;
@@ -1194,7 +1196,6 @@ body.theme-flat .widget-header-actions:hover {
   color: var(--muted);
   cursor: pointer;
   font-size: 0.8rem;
-  font-family: var(--font-body);
   transition: background 120ms, border-color 120ms, color 120ms;
 }
 
@@ -1202,6 +1203,11 @@ body.theme-flat .widget-header-actions:hover {
   background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--text);
+}
+
+.style-variant-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-2) 60%, transparent);
+  outline-offset: 1px;
 }
 
 /* Custom CSS */
