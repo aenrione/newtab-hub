@@ -32,7 +32,7 @@ Hub.injectStyles("widget-mealie", `
 
 Hub.registry.register("mealie", {
   label: "Mealie",
-  icon: "list",
+  icon: "assets/widget-icons/mealie.svg",
 
   credentialFields: [
     { key: "apiKey", label: "API Token", type: "password" }

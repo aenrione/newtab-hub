@@ -38,7 +38,7 @@ Hub.injectStyles("widget-twitch-top-games", `
 
 Hub.registry.register("twitch-top-games", {
   label: "Twitch Top Games",
-  icon: "https://www.twitch.tv/favicon.ico",
+  icon: "twitch",
   manualRefresh: true,
 
   credentialFields: [

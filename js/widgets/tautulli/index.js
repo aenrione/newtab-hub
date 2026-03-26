@@ -32,7 +32,7 @@ Hub.injectStyles("widget-tautulli", `
 
 Hub.registry.register("tautulli", {
   label: "Tautulli",
-  icon: "trendingUp",
+  icon: "assets/widget-icons/tautulli.svg",
   manualRefresh: true,
 
   credentialFields: [

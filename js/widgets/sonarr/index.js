@@ -27,7 +27,7 @@ Hub.injectStyles("widget-sonarr", `
 
 Hub.registry.register("sonarr", {
   label: "Sonarr",
-  icon: "tv",
+  icon: "assets/widget-icons/sonarr.svg",
   manualRefresh: true,
 
   defaultConfig: function () {

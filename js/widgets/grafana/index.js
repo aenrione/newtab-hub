@@ -121,7 +121,7 @@ Hub.injectStyles("widget-grafana", `
 
 Hub.registry.register("grafana", {
   label: "Grafana",
-  icon: "https://grafana.com/favicon.ico",
+  icon: "grafana",
   manualRefresh: true,
 
   credentialFields: [

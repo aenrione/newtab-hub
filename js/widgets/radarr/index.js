@@ -32,7 +32,7 @@ Hub.injectStyles("widget-radarr", `
 
 Hub.registry.register("radarr", {
   label: "Radarr",
-  icon: "film",
+  icon: "assets/widget-icons/radarr.svg",
   manualRefresh: true,
 
   credentialFields: [

@@ -803,9 +803,7 @@ Hub.grid = (function () {
       card.type = "button";
       card.tabIndex = 0;
       var icon = p.icon || "plus";
-      var iconHtml = /^https?:\/\//.test(icon)
-        ? '<img src="' + Hub.escapeHtml(icon) + '" class="add-widget-icon-img" width="14" height="14" alt="">'
-        : (Hub.icons[icon] || Hub.icons.plus);
+      var iconHtml = Hub.pickerIconMarkup(icon);
       card.innerHTML = iconHtml + "<span>" + Hub.escapeHtml(p.label) + "</span>";
       card.addEventListener("click", function () {
         var config = p.defaultConfig();

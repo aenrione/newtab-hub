@@ -32,7 +32,7 @@ Hub.injectStyles("widget-paperless-ngx", `
 
 Hub.registry.register("paperless-ngx", {
   label: "Paperless-ngx",
-  icon: "list",
+  icon: "assets/widget-icons/paperless-ngx.svg",
   manualRefresh: true,
 
   credentialFields: [

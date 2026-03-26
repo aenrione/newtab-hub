@@ -53,7 +53,7 @@ Hub.injectStyles("widget-twitch-channels", `
 
 Hub.registry.register("twitch-channels", {
   label: "Twitch Channels",
-  icon: "https://www.twitch.tv/favicon.ico",
+  icon: "twitch",
   manualRefresh: true,
 
   credentialFields: [

@@ -87,7 +87,7 @@ Hub.injectStyles("widget-github-prs", `
 
 Hub.registry.register("github-prs", {
   label: "GitHub PRs",
-  icon: "https://github.com/favicon.ico",
+  icon: "github",
   manualRefresh: true,
 
   credentialFields: [

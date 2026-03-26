@@ -1525,7 +1525,18 @@ body.config-sidebar-open {
 .add-widget-card:hover, .add-widget-card-focus { border-color: var(--accent-2); background: var(--surface-hover); }
 .add-widget-card:focus-visible { outline: 2px solid var(--accent-2, #79aee8); outline-offset: 1px; }
 .add-widget-card svg { flex-shrink: 0; color: var(--muted-strong); }
-.add-widget-icon-img { flex-shrink: 0; width: 14px; height: 14px; object-fit: contain; border-radius: 2px; }
+.add-widget-icon-img {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.add-widget-icon-img svg { width: 100%; height: 100%; display: block; }
 
 /* Grouped layout */
 .add-widget-grid.is-grouped { display: flex; flex-direction: column; gap: 0; }

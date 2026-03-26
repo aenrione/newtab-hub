@@ -32,7 +32,7 @@ Hub.injectStyles("widget-readarr", `
 
 Hub.registry.register("readarr", {
   label: "Readarr",
-  icon: "bookmark",
+  icon: "assets/widget-icons/readarr.svg",
   manualRefresh: true,
 
   credentialFields: [

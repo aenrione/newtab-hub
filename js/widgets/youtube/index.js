@@ -53,7 +53,7 @@ Hub.injectStyles("widget-youtube", `
 
 Hub.registry.register("youtube", {
   label: "YouTube",
-  icon: "https://www.youtube.com/favicon.ico",
+  icon: "youtube",
   manualRefresh: true,
 
   credentialFields: [

@@ -32,7 +32,7 @@ Hub.injectStyles("widget-netdata", `
 
 Hub.registry.register("netdata", {
   label: "Netdata",
-  icon: "trendingUp",
+  icon: "assets/widget-icons/netdata.svg",
   manualRefresh: true,
 
   defaultConfig: function () {

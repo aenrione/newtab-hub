@@ -32,7 +32,7 @@ Hub.injectStyles("widget-adguard", `
 
 Hub.registry.register("adguard", {
   label: "AdGuard Home",
-  icon: "shield",
+  icon: "assets/widget-icons/adguard.svg",
   manualRefresh: true,
 
   credentialFields: [

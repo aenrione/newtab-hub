@@ -32,7 +32,7 @@ Hub.injectStyles("widget-lidarr", `
 
 Hub.registry.register("lidarr", {
   label: "Lidarr",
-  icon: "rss",
+  icon: "assets/widget-icons/lidarr.svg",
   manualRefresh: true,
 
   credentialFields: [

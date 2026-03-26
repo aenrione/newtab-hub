@@ -213,10 +213,7 @@ Hub.registry.register("group", {
       pickerEl.className = "group-type-picker";
 
       function iconHtml(icon) {
-        if (/^https?:\/\//.test(icon)) {
-          return '<img src="' + Hub.escapeHtml(icon) + '" class="add-widget-icon-img" width="14" height="14" alt="">';
-        }
-        return Hub.icons[icon] || Hub.icons.plus;
+        return Hub.pickerIconMarkup(icon);
       }
 
       function updateBtn(type) {

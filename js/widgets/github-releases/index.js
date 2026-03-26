@@ -75,7 +75,7 @@ Hub.injectStyles("widget-github-releases", `
 
 Hub.registry.register("github-releases", {
   label: "GitHub Releases",
-  icon: "https://github.com/favicon.ico",
+  icon: "github",
   manualRefresh: true,
 
   credentialFields: [

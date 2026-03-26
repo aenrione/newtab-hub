@@ -32,7 +32,7 @@ Hub.injectStyles("widget-jellyfin", `
 
 Hub.registry.register("jellyfin", {
   label: "Jellyfin",
-  icon: "https://jellyfin.org/favicon.ico",
+  icon: "jellyfin",
   manualRefresh: true,
 
   credentialFields: [

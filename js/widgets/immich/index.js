@@ -32,7 +32,7 @@ Hub.injectStyles("widget-immich", `
 
 Hub.registry.register("immich", {
   label: "Immich",
-  icon: "https://immich.app/favicon.ico",
+  icon: "immich",
   manualRefresh: true,
 
   credentialFields: [

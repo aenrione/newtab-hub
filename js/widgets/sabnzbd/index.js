@@ -32,7 +32,7 @@ Hub.injectStyles("widget-sabnzbd", `
 
 Hub.registry.register("sabnzbd", {
   label: "SABnzbd",
-  icon: "arrowDownRight",
+  icon: "assets/widget-icons/sabnzbd.svg",
   manualRefresh: true,
 
   credentialFields: [

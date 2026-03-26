@@ -32,7 +32,7 @@ Hub.injectStyles("widget-bazarr", `
 
 Hub.registry.register("bazarr", {
   label: "Bazarr",
-  icon: "tv",
+  icon: "assets/widget-icons/bazarr.svg",
   manualRefresh: true,
 
   credentialFields: [
