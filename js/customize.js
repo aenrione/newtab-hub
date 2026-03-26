@@ -288,6 +288,33 @@ Hub.customize = (function () {
       });
       styleGrid.appendChild(row);
     });
+
+    /* Layout style toggle */
+    var variantRow = document.createElement("div");
+    variantRow.className = "style-control-row";
+    var variantLabel = document.createElement("span");
+    variantLabel.textContent = "Layout style";
+    var variantBtns = document.createElement("div");
+    variantBtns.className = "style-variant-btns";
+
+    ["default", "flat"].forEach(function (v) {
+      var btn = document.createElement("button");
+      btn.className = "style-variant-btn" + (currentStyles.styleVariant === v || (!currentStyles.styleVariant && v === "default") ? " active" : "");
+      btn.dataset.variant = v;
+      btn.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+      btn.addEventListener("click", function () {
+        currentStyles.styleVariant = v;
+        variantBtns.querySelectorAll(".style-variant-btn").forEach(function (b) {
+          b.classList.toggle("active", b === btn);
+        });
+        Hub.applyStyleVariant(v);
+      });
+      variantBtns.appendChild(btn);
+    });
+
+    variantRow.appendChild(variantLabel);
+    variantRow.appendChild(variantBtns);
+    styleGrid.appendChild(variantRow);
     styleSection.appendChild(styleGrid);
 
     /* Background image */
