@@ -18,6 +18,7 @@ window.ThemeSidebarKeyboard = function ThemeSidebarKeyboard(sidebar, body, opts)
   this.activeFieldIndex = 0;
   this.sections = [];
   this._handler = this._onKey.bind(this);
+  this._saveHandler = this._onDocumentKey.bind(this);
   this._focusinHandler = this._onFocusin.bind(this);
 };
 
@@ -26,12 +27,14 @@ window.ThemeSidebarKeyboard = function ThemeSidebarKeyboard(sidebar, body, opts)
 ThemeSidebarKeyboard.prototype.attach = function () {
   this.sections = Array.from(this.body.querySelectorAll(".theme-section"));
   this.sidebar.addEventListener("keydown", this._handler);
+  document.addEventListener("keydown", this._saveHandler, true);
   this.sidebar.addEventListener("focusin", this._focusinHandler);
   if (this.sections.length) this._focusSection(0);
 };
 
 ThemeSidebarKeyboard.prototype.detach = function () {
   this.sidebar.removeEventListener("keydown", this._handler);
+  document.removeEventListener("keydown", this._saveHandler, true);
   this.sidebar.removeEventListener("focusin", this._focusinHandler);
   this._clearRings();
   this._clearHints();
@@ -164,6 +167,18 @@ ThemeSidebarKeyboard.prototype._onFocusin = function (e) {
       return;
     }
   }
+};
+
+ThemeSidebarKeyboard.prototype._onDocumentKey = function (e) {
+  if (!this.sidebar.classList.contains("is-open")) return;
+  var target = e.target || document.activeElement;
+  if (!target || !this.sidebar.contains(target)) return;
+  var meta = e.metaKey || e.ctrlKey;
+  var key = (e.key || "").toLowerCase();
+  if (!meta || e.altKey) return;
+  if (key !== "enter" && key !== "s") return;
+  e.preventDefault();
+  this.onSave();
 };
 
 /* ── Key handler ── */
