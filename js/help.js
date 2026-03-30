@@ -18,6 +18,7 @@ Hub.help = (function () {
     ["U", "Scroll up"],
     ["D", "Scroll down"],
     ["Z", "Toggle zen mode", function () { Hub.zen.toggle(); Hub.zen.updateButtonIcon(); }],
+    ["Shift+Z", "Lock / unlock zen auto-trigger", function () { Hub.zen.toggleLock(); }],
     ["<key>", "Focus widget group (shown on headers)"],
     ["<key> + 1-9", "Open Nth item in focused group"],
     ["<key> + 0", "Focus widget input (e.g. Todo)"],

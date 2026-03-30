@@ -122,6 +122,7 @@ Hub.keyboard = (function () {
     return Array.from(container.querySelectorAll('[data-focusable="true"]')).filter(function (n) {
       if (n.offsetParent === null) return false;
       if (!includeInputs && (n.tagName === "INPUT" || n.tagName === "TEXTAREA")) return false;
+      if (n.classList.contains("chord-key-badge")) return false;
       return true;
     });
   }
@@ -185,26 +186,34 @@ Hub.keyboard = (function () {
   function renderKeyBadges() {
     document.querySelectorAll(".chord-key-badge").forEach(function (el) { el.remove(); });
     document.querySelectorAll(".widget-refresh-btn[data-chord-key]").forEach(function (el) {
+      var letter = el.querySelector(".chord-btn-letter");
+      if (letter) letter.remove();
       el.removeAttribute("data-chord-key");
       el.removeAttribute("aria-keyshortcuts");
     });
 
     Object.keys(widgetKeyMap).forEach(function (key) {
       var entry = widgetKeyMap[key];
-      var badge = document.createElement("span");
-      badge.className = "chord-key-badge";
-      badge.textContent = key.toUpperCase();
-
       var target = entry.container.querySelector(".group-toggle, .widget-header");
       if (!target) return;
       var actions = target.querySelector(".widget-header-actions");
       var refreshBtn = actions && actions.querySelector(".widget-refresh-btn");
       if (refreshBtn) {
+        /* Overlay the chord letter on the button as a small badge in its corner.
+           The sync icon stays visible; the letter is a separate DOM node so no
+           pseudo-element hacks are needed. */
         refreshBtn.setAttribute("data-chord-key", key.toUpperCase());
         refreshBtn.setAttribute("aria-keyshortcuts", key);
-        actions.insertBefore(badge, refreshBtn.nextSibling);
+        var letter = document.createElement("span");
+        letter.className = "chord-btn-letter";
+        letter.setAttribute("aria-hidden", "true");
+        letter.textContent = key.toUpperCase();
+        refreshBtn.appendChild(letter);
         return;
       }
+      var badge = document.createElement("span");
+      badge.className = "chord-key-badge";
+      badge.textContent = key.toUpperCase();
       (actions || target).appendChild(badge);
     });
   }
@@ -231,7 +240,7 @@ Hub.keyboard = (function () {
       entry.container.open = true;
     }
 
-    /* Show home-row letter indices on all focusable items (inputs included) */
+    /* Show home-row letter indices on all focusable items including the refresh button */
     var items = getContainerFocusables(entry.container, chordState.isTodo);
     items.forEach(function (item, i) {
       if (i >= CHORD_ITEM_KEYS.length) return;
@@ -246,6 +255,11 @@ Hub.keyboard = (function () {
       }
     });
 
+    /* Move focus-ring to the first non-refresh-button content item */
+    var nodes = focusables();
+    var firstContent = items.find(function (n) { return !n.dataset.chordKey; });
+    var firstItemIdx = firstContent ? nodes.indexOf(firstContent) : (items.length ? nodes.indexOf(items[0]) : -1);
+    if (firstItemIdx !== -1) highlight(firstItemIdx);
     chordState.timer = setTimeout(clearChord, 1500);
     return true;
   }
@@ -305,7 +319,11 @@ Hub.keyboard = (function () {
       if (!typing && !Hub.grid.isEditing() && searchFocusKeys[key] && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); Hub.focusSearch(key); return; }
 
       if (!typing && key === "?") { e.preventDefault(); Hub.help.show(); return; }
-      if (!typing && key === "z") { e.preventDefault(); Hub.zen.toggle(); Hub.zen.updateButtonIcon(); return; }
+      if (!typing && key === "z" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (e.shiftKey) { Hub.zen.toggleLock(); } else { Hub.zen.toggle(); Hub.zen.updateButtonIcon(); }
+        return;
+      }
 
       /* P / Shift+P: cycle profiles */
       if (!typing && (key === "p") && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -367,6 +385,9 @@ Hub.keyboard = (function () {
       /* Chord mode: item selection or escape while chord is active */
       if (!typing && chordState.active) {
         if (key === "escape") { e.preventDefault(); clearChord(); return; }
+
+        /* Directional keys exit chord and continue with spatial nav */
+        if (DIR_MAP[key]) { e.preventDefault(); clearChord(); navigate(DIR_MAP[key]); return; }
 
         /* Number keys (legacy + todo input via 0) */
         if (/^[0-9]$/.test(e.key)) {

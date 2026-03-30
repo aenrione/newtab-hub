@@ -6,6 +6,7 @@ Hub.zen = (function () {
   var DEFAULT_IDLE_TIMEOUT = 5000;
   var idleTimeoutMs = DEFAULT_IDLE_TIMEOUT;
   var active = false;
+  var locked = false;
   var timer = null;
   var getState = null;
   var shell = null;
@@ -80,15 +81,29 @@ Hub.zen = (function () {
     var btn = document.getElementById("zen-toggle");
     if (!btn) return;
     btn.innerHTML = active ? Hub.icons.eyeOff : Hub.icons.eye;
-    btn.title = active ? "Exit zen mode (z)" : "Zen mode (z)";
+    btn.title = locked
+      ? (active ? "Exit zen mode (z) — auto-trigger locked (Shift+Z)" : "Zen mode (z) — auto-trigger locked (Shift+Z)")
+      : (active ? "Exit zen mode (z)" : "Zen mode (z)");
+    btn.classList.toggle("zen-locked", locked);
   }
 
   function resetTimer() {
     clearTimeout(timer);
     timer = null;
-    if (!manuallyToggled && hasBgImage() && !shouldBlockZen()) {
+    if (!manuallyToggled && !locked && hasBgImage() && !shouldBlockZen()) {
       timer = setTimeout(enter, idleTimeoutMs);
     }
+  }
+
+  function toggleLock() {
+    locked = !locked;
+    if (locked) {
+      clearTimeout(timer);
+      timer = null;
+    } else {
+      resetTimer();
+    }
+    updateButtonIcon();
   }
 
   async function setIdleTimeoutMs(value, persist) {
@@ -155,8 +170,10 @@ Hub.zen = (function () {
   return {
     init: init,
     toggle: toggle,
+    toggleLock: toggleLock,
     exit: exit,
     isActive: function () { return active; },
+    isLocked: function () { return locked; },
     getIdleTimeoutMs: function () { return idleTimeoutMs; },
     setIdleTimeoutMs: setIdleTimeoutMs,
     resetTimer: resetTimer,
