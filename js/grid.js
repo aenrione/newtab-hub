@@ -300,6 +300,7 @@ Hub.grid = (function () {
       if (!item.el) return;
       item.el.style.gridColumn = item.col + " / span " + item.width;
       item.el.style.gridRow = item.row + " / span " + item.height;
+      item.el.style.setProperty("--grid-width", item.width);
       item.el.dataset.gridCol = item.col;
       item.el.dataset.gridRow = item.row;
       item.el.dataset.gridWidth = item.width;
@@ -327,6 +328,7 @@ Hub.grid = (function () {
 
       el.style.gridColumn = item.col + " / span " + item.width;
       el.style.gridRow = item.row + " / span " + item.height;
+      el.style.setProperty("--grid-width", item.width);
       el.dataset.gridWidget = item.widget;
       el.dataset.gridCol = item.col;
       el.dataset.gridRow = item.row;
@@ -1233,6 +1235,7 @@ Hub.grid = (function () {
         } else {
           w.style.gridColumn = col + " / span " + width;
           w.style.gridRow = row + " / span " + height;
+          w.style.setProperty("--grid-width", width);
         }
         scrollToRevealBottom(w);
       return true;
