@@ -1,0 +1,147 @@
+site_name: New Tab Hub
+site_url: https://aenrione.github.io/newtab-hub/
+site_description: A keyboard-first new tab dashboard for Chromium browsers
+site_author: aenrione
+repo_url: https://github.com/aenrione/newtab-hub
+repo_name: aenrione/newtab-hub
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aenrione/newtab-hub
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Configuration:
+    - Overview: configuration/index.md
+    - Profiles: configuration/profiles.md
+    - Grid Layout: configuration/grid-layout.md
+    - Credentials: configuration/credentials.md
+  - Widgets:
+    - Overview: widgets/index.md
+    - Productivity:
+      - Search: widgets/productivity/search.md
+      - Pinned Links: widgets/productivity/pinned-links.md
+      - Link Group: widgets/productivity/link-group.md
+      - Bookmarks: widgets/productivity/bookmarks.md
+      - Feeds: widgets/productivity/feeds.md
+      - Clock: widgets/productivity/clock.md
+      - Weather: widgets/productivity/weather.md
+      - Todo: widgets/productivity/todo.md
+      - Calendar: widgets/productivity/calendar.md
+      - Pomodoro: widgets/productivity/pomodoro.md
+      - Markets: widgets/productivity/markets.md
+    - Utilities:
+      - Monitor: widgets/utilities/monitor.md
+      - Change Detection: widgets/utilities/change-detection.md
+      - iFrame: widgets/utilities/iframe.md
+      - HTML: widgets/utilities/html.md
+      - Custom API: widgets/utilities/custom-api.md
+      - Group (Tabs): widgets/utilities/group.md
+      - Repository: widgets/utilities/repository.md
+    - Social & News:
+      - Hacker News: widgets/social/hacker-news.md
+      - Reddit: widgets/social/reddit.md
+      - Lobsters: widgets/social/lobsters.md
+      - YouTube: widgets/social/youtube.md
+      - Twitch Channels: widgets/social/twitch-channels.md
+      - Twitch Top Games: widgets/social/twitch-top-games.md
+    - GitHub:
+      - GitHub Releases: widgets/github/github-releases.md
+      - GitHub PRs: widgets/github/github-prs.md
+    - Media:
+      - Plex: widgets/media/plex.md
+      - Jellyfin: widgets/media/jellyfin.md
+      - Immich: widgets/media/immich.md
+      - Tautulli: widgets/media/tautulli.md
+    - Infrastructure:
+      - Home Assistant: widgets/infrastructure/home-assistant.md
+      - Proxmox: widgets/infrastructure/proxmox.md
+      - Portainer: widgets/infrastructure/portainer.md
+      - Nextcloud: widgets/infrastructure/nextcloud.md
+      - Grafana: widgets/infrastructure/grafana.md
+      - Netdata: widgets/infrastructure/netdata.md
+      - Speedtest Tracker: widgets/infrastructure/speedtest-tracker.md
+    - DNS & Network:
+      - Pi-hole: widgets/dns/pihole.md
+      - AdGuard Home: widgets/dns/adguard.md
+      - DNS Stats (unified): widgets/dns/dns-stats.md
+    - "\"*arr\" Stack":
+      - Sonarr: widgets/arr/sonarr.md
+      - Radarr: widgets/arr/radarr.md
+      - Lidarr: widgets/arr/lidarr.md
+      - Readarr: widgets/arr/readarr.md
+      - Bazarr: widgets/arr/bazarr.md
+      - Prowlarr: widgets/arr/prowlarr.md
+      - Overseerr: widgets/arr/overseerr.md
+    - Downloads:
+      - SABnzbd: widgets/downloads/sabnzbd.md
+      - NZBGet: widgets/downloads/nzbget.md
+      - Transmission: widgets/downloads/transmission.md
+    - Services:
+      - Miniflux: widgets/services/miniflux.md
+      - Mealie: widgets/services/mealie.md
+      - Paperless-ngx: widgets/services/paperless-ngx.md
+  - Customization:
+    - Overview: customization/index.md
+    - Themes: customization/themes.md
+    - Custom CSS: customization/custom-css.md
+  - Keyboard Shortcuts: keyboard-shortcuts.md
+  - Contributing: contributing.md

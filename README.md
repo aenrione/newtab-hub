@@ -1,205 +1,80 @@
 # New Tab Hub
 
-<img width="1470" height="825" alt="image" src="https://github.com/user-attachments/assets/58839209-1595-4181-ab03-bc34081f3796" />
+<img width="1470" height="825" alt="New Tab Hub dashboard screenshot" src="https://github.com/user-attachments/assets/58839209-1595-4181-ab03-bc34081f3796" />
 
-A keyboard-first new tab dashboard for Chromium browsers (Brave, Chrome, Edge, etc.). Replaces the default new tab page with a configurable grid of widgets: pinned links, link groups, RSS feeds, market tickers, and more.
+**A keyboard-first new tab dashboard for Chromium browsers.**
 
-Built entirely with vanilla JavaScript — no frameworks, no build step, no dependencies.
+Replace your default new tab page with a configurable grid of 50+ widgets — search, pinned links, RSS feeds, market tickers, media servers, home automation, and more. Built with vanilla JavaScript: no frameworks, no build step, no runtime dependencies.
 
-> **Note**: This project was vibecoded with AI assistance. The code prioritizes shipping features over polish, and contributions improving code quality are welcome.
+[![Docs](https://img.shields.io/badge/docs-aenrione.github.io%2Fnewtab--hub-blue)](https://aenrione.github.io/newtab-hub/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Features
+---
+
+## Highlights
 
 - **Search-first** — search bar auto-focuses on every new tab; type a URL to navigate directly
-- **Keyboard navigation** — arrow keys or `h/j/k/l` to move between widgets, `1`-`9` to open pinned links
-- **Widget grid** — 12-column CSS Grid layout with drag-and-drop reordering in edit mode
-- **Multiple profiles** — switch between "Work" and "Personal" dashboards, remembered per browser profile
-- **Theme engine** — 15+ built-in presets (Gruvbox, Catppuccin, Nord, Dracula, etc.) plus custom colors
-- **Background images** — URL or file upload with opacity and surface transparency controls
-- **Custom CSS** — inject your own styles from the theme sidebar
-- **RSS feeds** — inline feed reader with headline display
-- **Market tickers** — crypto (CoinGecko) and stock quotes (Stooq) with change indicators
-- **Health checks** — optional status dots on links that verify site availability
-- **Private config layer** — keep personal links and URLs out of version control
-- **Collapsible groups** — open/close state saved per profile
-- **No external dependencies** — pure HTML/CSS/JS, Manifest V3 extension
+- **Keyboard navigation** — `h/j/k/l` or arrow keys move between widgets; `1`–`9` open pinned links
+- **50+ widgets** — productivity, self-hosted services (*arr, Plex, Home Assistant, Pi-hole, ...), social feeds, and more
+- **Theme engine** — 15+ presets (Gruvbox, Catppuccin, Nord, Dracula, ...) plus full custom colors
+- **Multiple profiles** — separate Work and Personal dashboards, remembered per browser profile
+- **Private config layer** — keep personal URLs and API keys out of version control
+- **No cloud, no accounts** — everything runs locally inside the extension
 
-## Tests
+## Quick Start
 
-- Install test-only tooling with `npm install`
-- Run the Jest suite with `npm test`
-- The extension still ships with no runtime build step or app dependencies; Node is only used for tests
-
-## Installation
-
-1. Clone or download this repository
-2. Open your browser's extensions page:
-   - Brave: `brave://extensions`
-   - Chrome: `chrome://extensions`
-   - Edge: `edge://extensions`
-3. Enable **Developer mode**
-4. Click **Load unpacked** and select the project folder
-5. Open a new tab — the dashboard replaces the default page
-
-## Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| `/` or `Ctrl+K` | Focus search |
-| `1`-`9` | Open pinned link |
-| `Arrow keys` or `h/j/k/l` | Navigate between items |
-| `Enter` | Open focused link |
-| `u` / `d` | Scroll up / down |
-| `?` | Show shortcuts help |
-| `Escape` | Close dialogs / clear search |
-
-## Configuration
-
-The config system uses a two-tier approach: **shared** profiles that live in the repo, and **private** profiles that stay local.
-
-### Shared config (committed)
-
-`config.shared.js` — the manifest that lists available profiles:
-
-```js
-window.NEW_TAB_SHARED_CONFIG = {
-  defaultProfile: "work",
-  profiles: [
-    { id: "work", file: "profiles/shared/work.js" },
-    { id: "personal", file: "profiles/shared/personal.js" }
-  ]
-};
+```bash
+git clone https://github.com/aenrione/newtab-hub.git
 ```
 
-Each profile file defines a `widgets` array with layout and config:
+1. Open `chrome://extensions` (or `brave://extensions`, `edge://extensions`)
+2. Enable **Developer mode**
+3. Click **Load unpacked** → select the `newtab-hub` folder
+4. Open a new tab
 
-```js
-window.NEW_TAB_SHARED_PROFILES = window.NEW_TAB_SHARED_PROFILES || {};
+Full installation guide: [docs → Installation](https://aenrione.github.io/newtab-hub/installation/)
 
-window.NEW_TAB_SHARED_PROFILES.work = {
-  label: "Work",
-  widgets: [
-    { id: "search", type: "search", col: 1, row: 1, width: 12, height: 1,
-      config: { searchBaseUrl: "https://duckduckgo.com/?q=" } },
-    { id: "pinned", type: "pinned-links", col: 1, row: 2, width: 12, height: 1,
-      config: {
-        items: [
-          { title: "Gmail", href: "https://mail.google.com/", badge: "Inbox" },
-          { title: "GitHub", href: "https://github.com/", healthCheck: true }
-        ]
-      }
-    },
-    { id: "feeds", type: "feeds", col: 1, row: 3, width: 6, height: 1,
-      config: {
-        title: "Feeds",
-        items: [
-          { title: "HN", url: "https://hnrss.org/frontpage", site: "https://news.ycombinator.com/" }
-        ]
-      }
-    }
-  ]
-};
+## Documentation
+
+**[aenrione.github.io/newtab-hub](https://aenrione.github.io/newtab-hub/)**
+
+- [Installation](https://aenrione.github.io/newtab-hub/installation/)
+- [Configuration](https://aenrione.github.io/newtab-hub/configuration/)
+- [All Widgets](https://aenrione.github.io/newtab-hub/widgets/)
+- [Customization](https://aenrione.github.io/newtab-hub/customization/)
+- [Keyboard Shortcuts](https://aenrione.github.io/newtab-hub/keyboard-shortcuts/)
+- [Contributing](https://aenrione.github.io/newtab-hub/contributing/)
+
+## Widget Categories
+
+| Category | Examples |
+|----------|---------|
+| Productivity | Search, Pinned Links, Feeds, Weather, Todo, Pomodoro, Markets |
+| Utilities | Monitor, Custom API, iFrame, HTML, Group (Tabs) |
+| Social & News | Hacker News, Reddit, Lobsters, YouTube, Twitch |
+| GitHub | GitHub Releases, GitHub PRs, Repository |
+| Media | Plex, Jellyfin, Immich, Tautulli |
+| Infrastructure | Home Assistant, Proxmox, Portainer, Grafana, Nextcloud |
+| DNS | Pi-hole, AdGuard Home, DNS Stats |
+| *arr Stack | Sonarr, Radarr, Lidarr, Readarr, Bazarr, Prowlarr, Overseerr |
+| Downloads | SABnzbd, NZBGet, Transmission |
+| Services | Miniflux, Mealie, Paperless-ngx |
+
+## Development
+
+```bash
+npm install   # dev-only test tooling
+npm test      # run the Jest suite
 ```
 
-### Private config (git-ignored)
-
-To add links you don't want in the repo (banking, internal tools, etc.):
-
-1. Copy `config.private.example.js` to `config.private.js`
-2. Create files in `profiles/private/` (see `profiles/examples/` for reference)
-3. These files are loaded after shared profiles, so private widgets merge into existing profiles or define entirely new ones
-
-### Widget types
-
-| Type | Description | Config |
-|------|-------------|--------|
-| `search` | Search bar with URL detection | `searchBaseUrl` |
-| `pinned-links` | Quick-access links with `1-9` shortcuts | `items[]` with `title`, `href`, optional `badge`, `healthCheck` |
-| `link-group` | Collapsible group of links | `title`, `items[]` |
-| `feeds` | RSS/Atom feed reader | `title`, `items[]` with `title`, `url`, `site` |
-| `markets` | Crypto & stock tickers | `title`, `items[]` with `label`, `symbol`, `coinGeckoId` or `stooqSymbol` |
-| `clock` | Time and date display | *(none)* |
-
-### Grid layout
-
-Each widget specifies its position in a 12-column grid:
-
-- `col` — starting column (1-12)
-- `row` — starting row
-- `width` — column span (1-12)
-- `height` — row span
-
-You can also reposition widgets visually using the grid edit button in the top bar.
-
-## Runtime customization
-
-Click the **theme button** (half-circle icon) in the top bar to open the theme sidebar:
-
-- Pick a preset theme or customize individual colors
-- Adjust widget border radius and border width
-- Set a background image (URL or file upload) with opacity controls
-- Write custom CSS
-- Save globally or per-profile
-
-Click the **grid button** (four squares) to enter layout edit mode:
-
-- Drag widgets to reorder
-- Resize widgets
-- Add or remove widgets
-- Changes are saved to browser storage
-
-## Project structure
-
-```
-newtab-hub/
-  assets/              # Extension icons
-  js/
-    widgets/           # Widget plugins (search, pinned, links, feeds, markets, clock)
-    cache.js           # TTL-based cache (memory + storage)
-    customize.js       # Theme sidebar UI
-    grid.js            # 12-column grid layout engine
-    help.js            # Keyboard shortcuts dialog
-    icons.js           # Inline SVG icon set
-    keyboard.js        # Spatial keyboard navigation
-    main.js            # App orchestrator and startup
-    registry.js        # Widget plugin registry
-    search.js          # Search engine and URL detection
-    storage.js         # chrome.storage.local abstraction
-    theme.js           # Color scheme and style engine
-    utils.js           # Shared utilities
-  profiles/
-    shared/            # Committed profile configs
-    private/           # Git-ignored private overrides
-    examples/          # Reference profile templates
-  config.shared.js     # Profile manifest (committed)
-  config.private.example.js  # Template for private config
-  index.html           # Extension entry point
-  manifest.json        # Chrome Manifest V3
-  styles.css           # All styles
-```
-
-## Browser compatibility
-
-Built as a Manifest V3 extension. Works with any Chromium-based browser:
-
-- Brave
-- Google Chrome
-- Microsoft Edge
-- Vivaldi
-- Arc
-
-Firefox support would require porting to the WebExtension manifest format — contributions welcome.
+The extension has no runtime npm dependencies. Node is only used for tests.
 
 ## Contributing
 
-Contributions are welcome, especially:
+Contributions welcome — bug fixes, new widgets, Firefox support, accessibility improvements, and tests. See [CONTRIBUTING](https://aenrione.github.io/newtab-hub/contributing/) for details.
 
-- Firefox WebExtension port
-- Code quality improvements
-- New widget types
-- Accessibility enhancements
-- Tests
+> This project was vibecoded with AI assistance. The code prioritises shipping features over polish — contributions improving code quality are especially welcome.
 
 ## License
 
-MIT
+[MIT](LICENSE)

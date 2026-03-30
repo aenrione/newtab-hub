@@ -22,5 +22,9 @@ Thumbs.db
 # Dependencies (future-proofing)
 node_modules/
 
+# MkDocs build output
+site/
+
 # Legacy
 app.js
+.playwright-mcp
