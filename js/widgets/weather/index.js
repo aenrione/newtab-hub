@@ -3,28 +3,29 @@
 Hub.injectStyles("widget-weather", `
   .weather-condition {
     text-align: center;
-    padding: 12px 0 0;
+    padding: 10px 0 0;
   }
   .weather-cond-name {
     font-family: var(--font-display);
-    font-size: 1.45rem;
-    font-weight: 700;
+    font-size: 1.35rem;
+    font-weight: 600;
     color: var(--text);
     line-height: 1.2;
+    letter-spacing: -0.01em;
   }
   .weather-feels {
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     color: var(--muted-strong);
-    margin-top: 5px;
+    margin-top: 4px;
   }
   .weather-chart-outer {
     position: relative;
-    margin: 16px 0 0;
+    margin: 14px 0 0;
+    padding-top: 20px;
   }
   .weather-chart {
     position: relative;
-    height: 90px;
-    padding-top: 22px;
+    height: 80px;
     box-sizing: border-box;
   }
   .weather-bars {
@@ -32,14 +33,14 @@ Hub.injectStyles("widget-weather", `
     display: flex;
     align-items: flex-end;
     height: 100%;
-    gap: 2px;
-    padding: 0 8px;
+    gap: 3px;
+    padding: 0 4px;
     box-sizing: border-box;
   }
   .weather-daylight {
     position: absolute;
     top: 0; bottom: 0;
-    background: rgba(200, 140, 50, 0.13);
+    background: linear-gradient(to bottom, rgba(230, 160, 40, 0.18) 0%, rgba(200, 120, 20, 0.07) 100%);
     border-radius: 4px;
     pointer-events: none;
     z-index: 0;
@@ -52,57 +53,68 @@ Hub.injectStyles("widget-weather", `
     justify-content: flex-end;
     height: 100%;
     position: relative;
+    z-index: 1;
   }
   .weather-precip-dot {
-    width: 3px;
-    height: 3px;
+    width: 2px;
+    height: 2px;
     border-radius: 50%;
     background: #5b9cf6;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
     visibility: hidden;
     flex-shrink: 0;
   }
   .weather-precip-dot.on { visibility: visible; }
   .weather-bar {
     width: 100%;
-    border-radius: 3px 3px 0 0;
-    background: rgba(255, 255, 255, 0.18);
+    border-radius: 99px 99px 2px 2px;
+    background: rgba(255, 255, 255, 0.14);
     min-height: 4px;
+    transition: background 0.15s;
   }
   .weather-bar.day {
-    background: rgba(255, 255, 255, 0.26);
+    background: rgba(255, 255, 255, 0.22);
   }
   .weather-bar.now {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.88);
   }
-  .weather-now-val {
+  .weather-now-badge {
     position: absolute;
-    top: -18px;
-    left: 50%;
+    top: 0;
     transform: translateX(-50%);
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 700;
     color: var(--text);
     white-space: nowrap;
+    line-height: 1;
+    pointer-events: none;
   }
   .weather-time-row {
     position: relative;
-    height: 18px;
-    margin: 4px 8px 0;
+    height: 16px;
+    margin: 3px 4px 0;
   }
   .weather-time-lbl {
     position: absolute;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     color: var(--muted);
     transform: translateX(-50%);
     top: 0;
     white-space: nowrap;
   }
   .weather-loc {
-    text-align: center;
-    padding: 8px 0 12px;
-    font-size: 0.73rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 7px 0 10px;
+    font-size: 0.70rem;
     color: var(--muted);
+    line-height: 1;
+  }
+  .weather-loc svg {
+    flex-shrink: 0;
+    opacity: 0.6;
   }
 `);
 
@@ -179,6 +191,7 @@ Hub.registry.register("weather", {
       var setRight  = (100 - (sunsetHour + sunsetMin / 60) / 24 * 100).toFixed(1);
 
       var barsHtml = "";
+      var badgeLeftPct = ((nowHour + 0.5) / 24 * 100).toFixed(1);
       for (var i = 0; i < 24; i++) {
         var heightPct = Math.max(5, ((temps[i] - minT) / range) * 76 + 8);
         var isNow   = (i === nowHour);
@@ -189,7 +202,6 @@ Hub.registry.register("weather", {
           '<div class="weather-bar-col">' +
             '<div class="weather-precip-dot' + (showDot ? ' on' : '') + '"></div>' +
             '<div class="' + barClass + '" style="height:' + heightPct.toFixed(0) + '%"></div>' +
-            (isNow ? '<span class="weather-now-val">' + Math.round(cur.temperature_2m) + unitSym + '</span>' : '') +
           '</div>';
       }
 
@@ -206,6 +218,7 @@ Hub.registry.register("weather", {
           '<div class="weather-feels">Feels like ' + Math.round(cur.apparent_temperature) + unitSym + '</div>' +
         '</div>' +
         '<div class="weather-chart-outer">' +
+          '<span class="weather-now-badge" style="left:' + badgeLeftPct + '%">' + Math.round(cur.temperature_2m) + unitSym + '</span>' +
           '<div class="weather-chart">' +
             '<div class="weather-bars">' +
               '<div class="weather-daylight" style="left:' + riseLeft + '%;right:' + setRight + '%"></div>' +
@@ -214,7 +227,10 @@ Hub.registry.register("weather", {
           '</div>' +
           '<div class="weather-time-row">' + timeLabelsHtml + '</div>' +
         '</div>' +
-        '<div class="weather-loc">\uD83D\uDCCD ' + Hub.escapeHtml(locationName) + '</div>';
+        '<div class="weather-loc">' +
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>' +
+          Hub.escapeHtml(locationName) +
+        '</div>';
 
     } catch (_) {
       if (token !== state.renderToken) return;

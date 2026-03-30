@@ -68,6 +68,15 @@ Hub.injectStyles("widget-github-prs", `
     border-radius: 3px;
   }
   .gh-pr-draft { background: rgba(148, 163, 184, 0.15); color: var(--muted); }
+  .gh-pr-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .gh-pr-dot--open  { background: #3fb950; }
+  .gh-pr-dot--draft { background: rgba(148, 163, 184, 0.5); }
   .gh-pr-age { color: var(--muted); font-size: 0.68rem; flex-shrink: 0; }
   .editor-field--col { flex-direction: column; align-items: flex-start; gap: 4px; }
   .editor-field--col textarea {
@@ -157,11 +166,13 @@ Hub.registry.register("github-prs", {
       var a = Hub.createLink("gh-pr-row", pr.html_url, pr.title);
       a.dataset.searchText = pr.title + " " + repoName + " #" + pr.number;
 
+      var dotClass = pr.draft ? "gh-pr-dot--draft" : "gh-pr-dot--open";
       var badges = "";
       if (pr.draft) badges += '<span class="gh-pr-badge gh-pr-draft">Draft</span>';
 
       a.innerHTML =
         '<span class="gh-pr-top">' +
+          '<span class="gh-pr-dot ' + dotClass + '"></span>' +
           '<span class="gh-pr-title">' + Hub.escapeHtml(pr.title) + '</span>' +
           '<span class="gh-pr-right">' +
             '<span class="gh-pr-num">#' + pr.number + '</span>' +

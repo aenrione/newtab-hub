@@ -156,6 +156,7 @@ Hub.registry.register("group", {
       if (!childConfig._id) childConfig._id = (config._id || "group") + "-tab" + index;
 
       var childState = state || {};
+      childState.renderToken = localToken;
       try {
         plugin.render(contentEl, childConfig, childState);
       } catch (err) {
