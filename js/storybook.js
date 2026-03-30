@@ -6,6 +6,35 @@
   /* "live" | "mock" | "empty" | "error" */
   var sbState = "live";
 
+  /* ── Per-widget mock loader ─────────────────────────────────── */
+  var sbMocksLoaded = {};
+
+  function sbApplyMockConfigOverrides() {
+    var overrides = window.SB_MOCK_CONFIGS && window.SB_MOCK_CONFIGS[activeType];
+    if (overrides) {
+      Object.keys(overrides).forEach(function (k) {
+        var cur = activeConfig[k];
+        if (!cur || (Array.isArray(cur) && cur.length === 0)) activeConfig[k] = overrides[k];
+      });
+    }
+  }
+
+  /* Widget types whose folder name differs from their registered type */
+  var SB_WIDGET_FOLDERS = {
+    "pinned-links": "pinned",
+    "link-group":   "links"
+  };
+
+  function sbLoadMock(type, cb) {
+    if (sbMocksLoaded[type]) { cb(); return; }
+    sbMocksLoaded[type] = true;
+    var folder = SB_WIDGET_FOLDERS[type] || type;
+    var s = document.createElement("script");
+    s.src = "js/widgets/" + folder + "/mock.js?_=" + Date.now();
+    s.onload = s.onerror = cb;
+    document.head.appendChild(s);
+  }
+
   /* ── Hub method patching ───────────────────────────────────── */
   var _origCFJ   = Hub.cachedFetchJSON;
   var _origCF    = Hub.cachedFetch;
@@ -93,6 +122,34 @@
     return _origCreds(widgetId);
   };
 
+  /* ── Mock store (for widgets that use state.store, e.g. todo) ── */
+  var sbStoreMem = {};
+  var sbMockStore = {
+    get: function (key) {
+      if (Object.prototype.hasOwnProperty.call(sbStoreMem, key)) return Promise.resolve(sbStoreMem[key]);
+      var d = window.SB_MOCK_STORE;
+      return Promise.resolve(d && Object.prototype.hasOwnProperty.call(d, key) ? d[key] : null);
+    },
+    set: function (key, val) { sbStoreMem[key] = val; return Promise.resolve(); }
+  };
+
+  /* Patch window.fetch for widgets that bypass Hub (e.g. Transmission) */
+  var _origFetch = window.fetch;
+  window.fetch = function (url, opts) {
+    if (sbState === "error")
+      return Promise.reject(new Error("Simulated error — widget fetch failed"));
+    if (sbState === "mock" || sbState === "empty") {
+      var d = sbState === "mock" ? sbMockData(String(url)) : null;
+      return Promise.resolve({
+        ok: true, status: 200,
+        headers: { get: function () { return null; } },
+        json: function () { return Promise.resolve(d !== null ? d : sbEmptyFor(String(url))); },
+        text: function () { var v = d !== null ? d : sbEmptyFor(String(url)); return Promise.resolve(typeof v === "string" ? v : JSON.stringify(v)); }
+      });
+    }
+    return _origFetch.apply(this, arguments);
+  };
+
   /* ── Widget state ──────────────────────────────────────────── */
   var WIDTHS = [
     { label: "300px", px: 300 },
@@ -156,6 +213,7 @@
     buildPreview();
     buildEditor();
     syncUrl();
+    sbLoadMock(activeType, runLoad);
   }
 
   /* ── Preview ────────────────────────────── */
@@ -261,18 +319,21 @@
 
     widgetEl = document.createElement("div");
     widgetEl.className = "widget";
+    widgetEl.dataset.widgetId = "storybook:" + activeType;
     frameEl.appendChild(widgetEl);
     wrap.appendChild(frameEl);
 
     pane.appendChild(wrap);
-    runLoad();
+    /* runLoad() is called by sbLoadMock after mock.js loads */
   }
 
   function runLoad() {
     var plugin = Hub.registry.get(activeType);
     if (!plugin || !widgetEl) return;
 
-    activeState = { store: null, renderToken: {}, links: [] };
+    if (sbState === "mock") sbApplyMockConfigOverrides();
+
+    activeState = { store: sbMockStore, renderToken: 1, links: [], markets: [] };
     var token = activeState.renderToken;
 
     plugin.render(widgetEl, activeConfig, activeState);
@@ -327,6 +388,21 @@
   }
 
   /* ── Init ───────────────────────────────── */
+
+  /* Sync renderToken inside every widget load so the stale-cancellation
+     guard (token !== state.renderToken) never fires in storybook. This
+     fixes tab groups where activateTab() increments its own local token
+     but state.renderToken stays at 1 forever. */
+  Hub.registry.list().forEach(function (p) {
+    if (!p.load || p._sbLoadSynced) return;
+    var _orig = p.load;
+    p.load = async function (container, config, s, token) {
+      if (s && token !== undefined) s.renderToken = token;
+      return _orig.apply(this, arguments);
+    };
+    p._sbLoadSynced = true;
+  });
+
   buildSidebar();
 
   var fromUrl = readUrl();
